@@ -355,7 +355,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
       bridges:{storage:true,device:true,vibration:true,clipboard:true,notification:true,
         screen:true,tts:true,audio:true,sensor:true,alarm:true,sqlite:true,
         tasks:true,widget:true,capabilities:true,
-        trigger:true,intent:true,
+        trigger:true,intent:true,accessibility:false,
         camera:false,location:false,contacts:false,sms:false,calendar:false,
         biometric:false,nfc:false,ble:false,bluetooth:false,ssh:false,smb:false,
         httpServer:false,httpClient:false,tcp:false,udp:false,nsd:false,
@@ -600,6 +600,21 @@ class _PreviewScreenState extends State<PreviewScreen> {
     isPersistentActive:function(){for(var k in _triggers)if(_triggers[k].persistent)return true;return false;}
   };
 
+  // Accessibility — simulated stub for preview mode.
+  var accessibility={
+    isEnabled:function(){return false;},
+    isRunning:function(){return false;},
+    openSettings:function(){console.log('[Preview] accessibility.openSettings (no-op in preview)');},
+    onEvent:function(fn){console.log('[Preview] accessibility.onEvent registered');},
+    getRootWindow:function(maxDepth){console.log('[Preview] accessibility.getRootWindow');return 'null';},
+    findByText:function(text){console.log('[Preview] accessibility.findByText: '+text);return '[]';},
+    findById:function(id){console.log('[Preview] accessibility.findById: '+id);return '[]';},
+    performGlobalAction:function(action){console.log('[Preview] accessibility.performGlobalAction: '+action);return false;},
+    performAction:function(type,val,act,text){console.log('[Preview] accessibility.performAction: '+type+'='+val+' action='+act);return false;},
+    clickAt:function(x,y,dur){console.log('[Preview] accessibility.clickAt: '+x+','+y);return false;},
+    swipe:function(sx,sy,ex,ey,dur){console.log('[Preview] accessibility.swipe: '+sx+','+sy+' -> '+ex+','+ey);return false;}
+  };
+
   // Intent — simulated. launchApp/openUrl log the intended action; listInstalledApps
   // returns a small fake catalog so pickers populate; overlay perm reports as granted.
   var intent={
@@ -628,7 +643,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
     tcp:tcp, udp:udp, nsd:nsd,
     wifiDirect:wifiDirect, push:push,
     download:download, media:media, bluetooth:bluetooth, tasks:tasks, widget:widget,
-    trigger:trigger, intent:intent,
+    trigger:trigger, intent:intent, accessibility:accessibility,
     // Top-level convenience methods (same as ShellActivity)
     save:function(k,v){storage.save(k,v);},
     load:function(k){return storage.load(k);},

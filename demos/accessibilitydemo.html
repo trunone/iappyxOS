@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Accessibility Demo</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+*:focus{outline:none}
+body{background:#0d0d1a;color:#eaeaea;font-family:-apple-system,sans-serif;padding:20px;min-height:100vh}
+h2{font-size:18px;margin-bottom:16px;text-align:center}
+.section{background:#1a1a2e;border-radius:14px;padding:16px;margin-bottom:16px}
+.section h3{font-size:14px;color:#4FC3F7;margin-bottom:12px}
+.desc{font-size:12px;color:rgba(255,255,255,0.4);margin-bottom:12px;line-height:1.5}
+.btn{background:#0f3460;color:#fff;border:none;padding:12px 20px;border-radius:10px;font-size:14px;width:100%;margin-bottom:8px;cursor:pointer}
+.btn:active{opacity:0.7}
+.btn.outline{background:transparent;border:1px solid #0f3460;color:#4FC3F7}
+.log{background:#0d0d1a;border-radius:8px;padding:12px;font-size:11px;color:rgba(255,255,255,0.5);max-height:220px;overflow-y:auto;font-family:monospace;line-height:1.6}
+.status{font-size:13px;text-align:center;margin-bottom:12px;padding:10px;border-radius:8px;background:#0d0d1a}
+.status.on{color:#69F0AE;border:1px solid rgba(105,240,174,0.3)}
+.status.off{color:#FF6B6B;border:1px solid rgba(255,107,107,0.3)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+</style></head><body>
+<h2>Accessibility Demo</h2>
+
+<div class="section">
+  <h3>Service Status</h3>
+  <div id="status" class="status off">Service status unknown</div>
+  <button class="btn" onclick="checkStatus()">Refresh Status</button>
+  <button class="btn outline" onclick="openSettings()">Open Accessibility Settings</button>
+</div>
+
+<div class="section">
+  <h3>Global Actions</h3>
+  <div class="grid">
+    <button class="btn" onclick="doGlobal('back')">Back</button>
+    <button class="btn" onclick="doGlobal('home')">Home</button>
+    <button class="btn" onclick="doGlobal('recents')">Recents</button>
+    <button class="btn" onclick="doGlobal('notifications')">Notifs</button>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Screen Hierarchy</h3>
+  <button class="btn" onclick="dumpTree()">Dump Root Window</button>
+  <button class="btn outline" onclick="listenEvents()">Start Event Monitoring</button>
+</div>
+
+<div class="section">
+  <h3>Console Log</h3>
+  <div id="log" class="log">Awaiting actions...</div>
+</div>
+
+<script>
+function _init(){if(typeof iappyx==='undefined'){setTimeout(_init,50);return;}onReady();}
+window.addEventListener('load',function(){setTimeout(_init,200)});
+
+function log(msg){
+  var el=document.getElementById('log');
+  var time=new Date().toLocaleTimeString();
+  el.innerHTML='['+time+'] '+msg+'<br>'+el.innerHTML;
+}
+
+function checkStatus(){
+  if(!iappyx.accessibility){log('Accessibility bridge unavailable');return;}
+  var enabled=iappyx.accessibility.isEnabled();
+  var running=iappyx.accessibility.isRunning();
+  var st=document.getElementById('status');
+  if(running){
+    st.className='status on';
+    st.textContent='Service Active & Running';
+  }else if(enabled){
+    st.className='status off';
+    st.textContent='Enabled in Settings (Service inactive)';
+  }else{
+    st.className='status off';
+    st.textContent='Disabled in Settings';
+  }
+  log('Enabled: '+enabled+', Running: '+running);
+}
+
+function openSettings(){
+  if(iappyx.accessibility)iappyx.accessibility.openSettings();
+}
+
+function doGlobal(act){
+  if(!iappyx.accessibility)return;
+  var res=iappyx.accessibility.performGlobalAction(act);
+  log('Global action "'+act+'": '+(res?'success':'failed'));
+}
+
+function dumpTree(){
+  if(!iappyx.accessibility)return;
+  var json=iappyx.accessibility.getRootWindow(5);
+  log('Root window: '+(json?json.substring(0,120)+'...':'null'));
+}
+
+function listenEvents(){
+  if(!iappyx.accessibility)return;
+  window.onAccessibilityEvent=function(e){
+    log('Event: '+e.eventTypeName+' from '+(e.packageName||'system'));
+  };
+  iappyx.accessibility.onEvent('window.onAccessibilityEvent');
+  log('Listening for accessibility events...');
+}
+
+function onReady(){
+  checkStatus();
+}
+</script>
+</body></html>

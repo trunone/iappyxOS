@@ -362,6 +362,22 @@ Rules:
 
 Rule: if a trigger callback calls `launchApp`, the app MUST call `requestOverlayPermission()` during its setup UI (with a clear explanation) before registering the trigger. Otherwise the launch silently fails when the user isn't looking at the app.
 
+### Accessibility (inspect screen hierarchy, automation & global gestures)
+`iappyx.accessibility.isEnabled()` → bool — returns true if the Accessibility Service is enabled in Android Settings.
+`iappyx.accessibility.isRunning()` → bool — returns true if the service instance is active and connected.
+`iappyx.accessibility.openSettings()` — opens Android Accessibility Settings page so the user can enable the service.
+`iappyx.accessibility.onEvent('window.onAccessibilityEvent')` — register persistent callback for system accessibility events:
+  fires `{eventType, eventTypeName, packageName, className, text, eventTime, sourceNode}`.
+`iappyx.accessibility.getRootWindow(maxDepth)` → JSON string (sync) — dump active window node tree up to `maxDepth` (default 20).
+  returns `{packageName, className, text, viewId, contentDescription, clickable, editable, enabled, focused, visibleToUser, bounds:{left,top,right,bottom,width,height}, children:[]}` or `"null"`.
+`iappyx.accessibility.findByText(text)` → JSON array (sync) — returns matching nodes `[{packageName, className, text, viewId, contentDescription, clickable, editable, enabled, focused, visibleToUser, bounds}]`.
+`iappyx.accessibility.findById(viewId)` → JSON array (sync) — search nodes by resource ID.
+`iappyx.accessibility.performGlobalAction(action)` → bool — execute system action: `"back"`, `"home"`, `"recents"`, `"notifications"`, `"quick_settings"`, `"power_dialog"`, `"split_screen"`, `"lock_screen"`, or `"take_screenshot"`.
+`iappyx.accessibility.performAction(targetType, targetValue, actionName, textArg)` → bool — perform node action.
+  `targetType`: `"id"` or `"text"`. `actionName`: `"click"`, `"long_click"`, `"focus"`, `"clear_focus"`, `"scroll_forward"`, `"scroll_backward"`, or `"set_text"` (passes `textArg`).
+`iappyx.accessibility.clickAt(x, y [, durationMs])` → bool — dispatch tap gesture at screen coordinates (x, y in pixels).
+`iappyx.accessibility.swipe(startX, startY, endX, endY [, durationMs])` → bool — dispatch swipe gesture across screen coordinates.
+
 ### Contacts (async, cbId pattern)
 `iappyx.contacts.getContacts(cbId)` → `{ok,contacts:[{name,phones:[],emails:[]}]}`
 

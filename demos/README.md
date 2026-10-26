@@ -43,6 +43,7 @@ Pre-built HTML apps that demonstrate iappyxOS native bridges and capabilities. E
 | `runtracker.html` | Run Tracker | GPS foreground tracking, steps, geofencing |
 | `soundtools.html` | Sound Tools | Real-time mic spectrum, sound effects, volume streams |
 | `printexport.html` | Print & Export | Print to PDF, save to Downloads, share files |
+| `accessibilitydemo.html` | Accessibility | Screen inspection, automation & gestures |
 
 ## Usage
 
