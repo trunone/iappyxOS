@@ -133,7 +133,7 @@ public class AppAccessibilityService extends AccessibilityService {
 
     // ── Static methods called by AccessibilityBridge ──
 
-    public static boolean performGlobalAction(int action) {
+    public static boolean doGlobalAction(int action) {
         if (instance == null) return false;
         return instance.performGlobalAction(action);
     }
@@ -329,7 +329,6 @@ public class AppAccessibilityService extends AccessibilityService {
             case AccessibilityEvent.TYPE_ANNOUNCEMENT: return "TYPE_ANNOUNCEMENT";
             case AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED: return "TYPE_VIEW_ACCESSIBILITY_FOCUSED";
             case AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUS_CLEARED: return "TYPE_VIEW_ACCESSIBILITY_FOCUS_CLEARED";
-            case AccessibilityEvent.TYPE_VIEW_TEXT_TRAVERSAL_AT_MOVEMENT_GRANULARITY: return "TYPE_VIEW_TEXT_TRAVERSAL_AT_MOVEMENT_GRANULARITY";
             case AccessibilityEvent.TYPE_GESTURE_DETECTION_START: return "TYPE_GESTURE_DETECTION_START";
             case AccessibilityEvent.TYPE_GESTURE_DETECTION_END: return "TYPE_GESTURE_DETECTION_END";
             case AccessibilityEvent.TYPE_TOUCH_INTERACTION_START: return "TYPE_TOUCH_INTERACTION_START";

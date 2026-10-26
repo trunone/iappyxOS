@@ -8827,7 +8827,7 @@ public class ShellActivity extends ComponentActivity {
                 }
             }
             if (code <= 0) return false;
-            return AppAccessibilityService.performGlobalAction(code);
+            return AppAccessibilityService.doGlobalAction(code);
         }
 
         @JavascriptInterface
