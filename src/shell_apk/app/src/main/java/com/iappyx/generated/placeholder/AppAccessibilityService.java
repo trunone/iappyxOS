@@ -67,8 +67,11 @@ public class AppAccessibilityService extends AccessibilityService {
                 context.getContentResolver(),
                 Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
             if (services != null) {
-                String myService = context.getPackageName() + "/" + AppAccessibilityService.class.getName();
-                return services.toLowerCase().contains(myService.toLowerCase());
+                String pkg = context.getPackageName().toLowerCase();
+                String cls = AppAccessibilityService.class.getName().toLowerCase();
+                String simpleCls = AppAccessibilityService.class.getSimpleName().toLowerCase();
+                String servicesLower = services.toLowerCase();
+                return servicesLower.contains(pkg) && (servicesLower.contains(cls) || servicesLower.contains(simpleCls));
             }
         }
         return false;

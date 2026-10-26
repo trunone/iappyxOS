@@ -24,7 +24,7 @@ echo ""
 # Step 2: Build container app
 echo "▶ Building container app..."
 cd "$CONTAINER_DIR"
-flutter build apk --release
+flutter build apk --release --android-skip-build-dependency-validation
 echo ""
 
 # Step 3: Copy to bin/
