@@ -245,6 +245,7 @@ public class ShellActivity extends ComponentActivity {
     private String pendingSegmentCallbackId;
     private String pendingMediaCbId;
     private BroadcastReceiver locationUpdateReceiver;
+    private BroadcastReceiver accessibilityEventReceiver;
     private BroadcastReceiver mediaButtonReceiver;
     private BroadcastReceiver mediaMetadataReceiver;
     private PermissionRequest pendingWebPermission;
@@ -364,6 +365,7 @@ public class ShellActivity extends ComponentActivity {
         webView.addJavascriptInterface(new CapabilitiesBridge(),"iappyxCapabilities");
         webView.addJavascriptInterface(new TriggerBridge(),      "iappyxTrigger");
         webView.addJavascriptInterface(new IntentBridge(),       "iappyxIntent");
+        webView.addJavascriptInterface(new AccessibilityBridge(),"iappyxAccessibility");
         // Register trigger receivers dynamically for the life of this process.
         // Unconditional because on Android 15+ static manifest receivers for charger/
         // headphones appear to be suppressed silently — dynamic registration works.
@@ -509,6 +511,7 @@ public class ShellActivity extends ComponentActivity {
                     "widget:iappyxWidget," +
                     "trigger:iappyxTrigger," +
                     "intent:iappyxIntent," +
+                    "accessibility:iappyxAccessibility," +
                     "capabilities:function(){return JSON.parse(iappyxCapabilities.get())}," +
                     "onTextSelected:function(fn){document.addEventListener('selectionchange',function(){" +
                     "var s=window.getSelection();if(s&&s.toString().trim().length>0){fn({text:s.toString().trim()})}" +
@@ -568,6 +571,22 @@ public class ShellActivity extends ComponentActivity {
         });
 
         webView.loadUrl("file:///android_asset/app/index.html");
+
+        // Register broadcast receiver for accessibility events
+        accessibilityEventReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (!activityAlive) return;
+                String json = intent.getStringExtra("json");
+                String fn = intent.getStringExtra("callbackFn");
+                if (json != null && fn != null) {
+                    fireEvent(fn, json);
+                }
+            }
+        };
+        registerReceiver(accessibilityEventReceiver,
+            new android.content.IntentFilter("com.iappyx.ACCESSIBILITY_EVENT"),
+            Context.RECEIVER_NOT_EXPORTED);
 
         // Register broadcast receiver for foreground location updates.
         // Reads payload from intent extras — the previous design round-
@@ -912,6 +931,7 @@ public class ShellActivity extends ComponentActivity {
             activeClipListener = null;
         }
         // Unregister broadcast receivers
+        try { if (accessibilityEventReceiver != null) unregisterReceiver(accessibilityEventReceiver); } catch (Exception ignored) {}
         try { if (locationUpdateReceiver != null) unregisterReceiver(locationUpdateReceiver); } catch (Exception ignored) {}
         try { if (mediaButtonReceiver != null) unregisterReceiver(mediaButtonReceiver); } catch (Exception ignored) {}
         try { if (mediaMetadataReceiver != null) unregisterReceiver(mediaMetadataReceiver); } catch (Exception ignored) {}
@@ -8328,6 +8348,7 @@ public class ShellActivity extends ComponentActivity {
                 bridges.put("tasks", true);
                 bridges.put("bluetooth", true);
                 bridges.put("trigger", true);
+                bridges.put("accessibility", AppAccessibilityService.isServiceRunning());
                 caps.put("bridges", bridges);
 
                 JSONObject perms = new JSONObject();
@@ -8713,6 +8734,171 @@ public class ShellActivity extends ComponentActivity {
      * permission on. Apps that plan to call launchApp from a trigger should call
      * this at setup time.
      */
+    /**
+     * iappyx.accessibility.* — inspect UI node hierarchy, capture accessibility events,
+     * perform gestures and actions across apps via Android AccessibilityService.
+     */
+    class AccessibilityBridge {
+        @JavascriptInterface
+        public boolean isEnabled() {
+            return AppAccessibilityService.isServiceEnabled(ShellActivity.this);
+        }
+
+        @JavascriptInterface
+        public boolean isRunning() {
+            return AppAccessibilityService.isServiceRunning();
+        }
+
+        @JavascriptInterface
+        public void openSettings() {
+            runOnUiThread(() -> {
+                try {
+                    Intent intent = new Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS);
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(intent);
+                } catch (Exception e) {
+                    Log.w("iappyxOS", "openSettings: " + e.getMessage());
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void onEvent(String callbackFn) {
+            if (callbackFn != null && isSafeCallbackName(callbackFn)) {
+                AppAccessibilityService.setEventCallback(callbackFn);
+            }
+        }
+
+        @JavascriptInterface
+        public String getRootWindow() {
+            return getRootWindow("20");
+        }
+
+        @JavascriptInterface
+        public String getRootWindow(String maxDepthStr) {
+            int maxDepth = 20;
+            if (maxDepthStr != null) {
+                try { maxDepth = Integer.parseInt(maxDepthStr); } catch (Exception ignored) {}
+            }
+            String res = AppAccessibilityService.getRootWindowJson(maxDepth);
+            return res != null ? res : "null";
+        }
+
+        @JavascriptInterface
+        public String findByText(String text) {
+            return AppAccessibilityService.findNodesByText(text);
+        }
+
+        @JavascriptInterface
+        public String findById(String viewId) {
+            return AppAccessibilityService.findNodesById(viewId);
+        }
+
+        @JavascriptInterface
+        public boolean performGlobalAction(String actionNameOrCode) {
+            if (actionNameOrCode == null) return false;
+            int code = -1;
+            try {
+                code = Integer.parseInt(actionNameOrCode);
+            } catch (NumberFormatException e) {
+                String act = actionNameOrCode.toLowerCase(Locale.ROOT);
+                switch (act) {
+                    case "back": code = android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK; break;
+                    case "home": code = android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME; break;
+                    case "recents": code = android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS; break;
+                    case "notifications": code = android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS; break;
+                    case "quick_settings": code = android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS; break;
+                    case "power_dialog": code = android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_POWER_DIALOG; break;
+                    case "split_screen":
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                            code = android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_TOGGLE_SPLIT_SCREEN;
+                        }
+                        break;
+                    case "lock_screen":
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                            code = android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN;
+                        }
+                        break;
+                    case "take_screenshot":
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            code = android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT;
+                        }
+                        break;
+                }
+            }
+            if (code <= 0) return false;
+            return AppAccessibilityService.performGlobalAction(code);
+        }
+
+        @JavascriptInterface
+        public boolean performAction(String targetType, String targetValue, String actionName) {
+            return performAction(targetType, targetValue, actionName, null);
+        }
+
+        @JavascriptInterface
+        public boolean performAction(String targetType, String targetValue, String actionName, String textArg) {
+            if (actionName == null) return false;
+            int action = -1;
+            String act = actionName.toLowerCase(Locale.ROOT);
+            switch (act) {
+                case "click": action = android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK; break;
+                case "long_click": action = android.view.accessibility.AccessibilityNodeInfo.ACTION_LONG_CLICK; break;
+                case "focus": action = android.view.accessibility.AccessibilityNodeInfo.ACTION_FOCUS; break;
+                case "clear_focus": action = android.view.accessibility.AccessibilityNodeInfo.ACTION_CLEAR_FOCUS; break;
+                case "scroll_forward": action = android.view.accessibility.AccessibilityNodeInfo.ACTION_SCROLL_FORWARD; break;
+                case "scroll_backward": action = android.view.accessibility.AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD; break;
+                case "set_text": action = android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT; break;
+            }
+            if (action <= 0) {
+                try { action = Integer.parseInt(actionName); } catch (Exception ignored) {}
+            }
+            if (action <= 0) return false;
+            return AppAccessibilityService.performActionOnNode(targetType, targetValue, action, textArg);
+        }
+
+        @JavascriptInterface
+        public boolean clickAt(String xStr, String yStr) {
+            return clickAt(xStr, yStr, "100");
+        }
+
+        @JavascriptInterface
+        public boolean clickAt(String xStr, String yStr, String durationMsStr) {
+            try {
+                float x = Float.parseFloat(xStr);
+                float y = Float.parseFloat(yStr);
+                long duration = 100;
+                if (durationMsStr != null && !durationMsStr.isEmpty()) {
+                    duration = Long.parseLong(durationMsStr);
+                }
+                return AppAccessibilityService.gestureClick(x, y, duration);
+            } catch (Exception e) {
+                return false;
+            }
+        }
+
+        @JavascriptInterface
+        public boolean swipe(String startXStr, String startYStr, String endXStr, String endYStr) {
+            return swipe(startXStr, startYStr, endXStr, endYStr, "300");
+        }
+
+        @JavascriptInterface
+        public boolean swipe(String startXStr, String startYStr, String endXStr, String endYStr, String durationMsStr) {
+            try {
+                float startX = Float.parseFloat(startXStr);
+                float startY = Float.parseFloat(startYStr);
+                float endX = Float.parseFloat(endXStr);
+                float endY = Float.parseFloat(endYStr);
+                long duration = 300;
+                if (durationMsStr != null && !durationMsStr.isEmpty()) {
+                    duration = Long.parseLong(durationMsStr);
+                }
+                return AppAccessibilityService.gestureSwipe(startX, startY, endX, endY, duration);
+            } catch (Exception e) {
+                return false;
+            }
+        }
+    }
+
     class IntentBridge {
         @JavascriptInterface
         public boolean launchApp(String packageName) {
