@@ -584,9 +584,14 @@ public class ShellActivity extends ComponentActivity {
                 }
             }
         };
-        registerReceiver(accessibilityEventReceiver,
-            new android.content.IntentFilter("com.iappyx.ACCESSIBILITY_EVENT"),
-            Context.RECEIVER_NOT_EXPORTED);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(accessibilityEventReceiver,
+                new android.content.IntentFilter("com.iappyx.ACCESSIBILITY_EVENT"),
+                Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(accessibilityEventReceiver,
+                new android.content.IntentFilter("com.iappyx.ACCESSIBILITY_EVENT"));
+        }
 
         // Register broadcast receiver for foreground location updates.
         // Reads payload from intent extras — the previous design round-

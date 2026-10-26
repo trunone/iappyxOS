@@ -194,7 +194,6 @@
         <service
             android:name="com.iappyx.generated.placeholder.AppAccessibilityService"
             android:exported="true"
-            android:label="iappyxOS Accessibility Service"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
