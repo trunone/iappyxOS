@@ -53,4 +53,6 @@ dependencies {
     implementation 'androidx.lifecycle:lifecycle-service:2.7.0'
     // Play Services geofencing (efficient OS-managed geofence monitoring for trigger.geofence)
     implementation 'com.google.android.gms:play-services-location:21.3.0'
+    // AndroidX JavaScript Engine (V8 engine sandbox for task execution)
+    implementation 'androidx.javascriptengine:javascriptengine:1.0.0-beta01'
 }

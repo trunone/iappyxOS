@@ -25,4 +25,5 @@ flutter:
     - assets/shell_template.apk
     - assets/shell_template_web.apk
     - assets/system_prompt.md
+    - assets/task_system_prompt.md
     - assets/ic_launcher.png

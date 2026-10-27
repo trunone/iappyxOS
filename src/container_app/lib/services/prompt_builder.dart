@@ -27,6 +27,12 @@ import 'settings_service.dart';
 
 class PromptBuilder {
   static String? _defaultPrompt;
+  static String? _taskPrompt;
+
+  static Future<String> getTaskSystemPrompt() async {
+    _taskPrompt ??= await rootBundle.loadString('assets/task_system_prompt.md');
+    return _taskPrompt!;
+  }
 
   static Future<String> getSystemPrompt() async {
     // Check for custom prompt first
@@ -150,5 +156,72 @@ Description: $description
 Generate a complete, fully functional app matching this description. Apply all technical requirements from the instructions above.
 
 REMINDER (iappyxOS system prompt $versionTag): every `iappyx.*` method you use must be verified against the Bridge reference above. If you are uncertain whether a method exists, it does not — pick one that IS listed.''';
+  }
+
+  static Future<String> buildLinkedTaskPrompt({
+    required String appName,
+    required String description,
+    String? existingScript,
+  }) async {
+    final versionTag = _todayVersionTag();
+    final update = existingScript != null && existingScript.trim().isNotEmpty;
+    final buf = StringBuffer();
+    buf.writeln('Build a JavaScript V8 task script for iappyxOS ($versionTag).');
+    buf.writeln();
+    buf.writeln('Task name: $appName');
+    buf.writeln('Goal: $description');
+    buf.writeln();
+    buf.writeln('The full iappyxOS spec is at:');
+    buf.writeln('https://raw.githubusercontent.com/iappyx/iappyxOS/main/SPEC.md');
+    buf.writeln();
+    buf.writeln('Core rules:');
+    buf.writeln('- Return ONLY valid JavaScript code. No HTML tags, no markdown fences.');
+    buf.writeln('- Use `console.log()` for output logging.');
+    buf.writeln('- Use `iappyx.save()` / `iappyx.load()` for persistent storage.');
+    buf.writeln('- Use `iappyx.httpClient.request(optsJson, cbId)` for networking.');
+    if (update) {
+      buf.writeln();
+      buf.writeln('Current script code:');
+      buf.writeln('```javascript');
+      buf.write(existingScript);
+      buf.writeln();
+      buf.writeln('```');
+    }
+    return buf.toString();
+  }
+
+  static Future<String> buildTaskPrompt({
+    required String appName,
+    required String description,
+    String? existingScript,
+  }) async {
+    var systemPrompt = await getTaskSystemPrompt();
+    final versionTag = _todayVersionTag();
+    systemPrompt = systemPrompt.replaceAll('{{VERSION_TAG}}', versionTag);
+    if (existingScript != null && existingScript.trim().isNotEmpty) {
+      return '''$systemPrompt
+
+---
+
+TASK UPDATE REQUEST:
+Task name: $appName
+Description: $description
+
+Current script:
+```javascript
+$existingScript
+```
+
+Update this JavaScript task script according to the description. Return ONLY the complete updated JavaScript code.''';
+    }
+    return '''$systemPrompt
+
+---
+
+TASK REQUEST:
+Task name: $appName
+Description: $description
+
+Generate a complete, fully functional JavaScript task script matching this description. Return ONLY executable JavaScript code.''';
   }
 }

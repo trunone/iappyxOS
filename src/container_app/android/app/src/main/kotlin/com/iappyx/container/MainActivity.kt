@@ -117,6 +117,7 @@ class MainActivity : FlutterActivity() {
                     val iconConfig = call.argument<String>("iconConfig")
                     val firebaseConfig = call.argument<String>("firebaseConfig")
                     val webOnly = call.argument<Boolean>("webOnly") ?: false
+                    val taskOnly = call.argument<Boolean>("taskOnly") ?: false
                     // Bundle file paths: {filename: absolutePath} — read by Kotlin, not passed as bytes
                     @Suppress("UNCHECKED_CAST")
                     val bundleFiles = call.argument<Map<String, String>>("bundleFiles") ?: emptyMap()
@@ -125,7 +126,7 @@ class MainActivity : FlutterActivity() {
                     scope.launch {
                         try {
                             val info = generator.injectAndInstall(
-                                label, html, packageName, iconConfig, firebaseConfig, webOnly,
+                                label, html, packageName, iconConfig, firebaseConfig, webOnly, taskOnly,
                                 bundleFiles,
                             ) { msg ->
                                 channel.invokeMethod("onProgress", msg)

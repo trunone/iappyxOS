@@ -211,10 +211,12 @@ class CreateScreenState extends State<CreateScreen> {
 
   String _stripMarkdownFences(String text) {
     var s = text.trim();
-    final m = RegExp(r'^```(?:html)?\s*\n?([\s\S]*?)\n?\s*```$').firstMatch(s);
+    final m = RegExp(r'^```(?:html|js|javascript)?\s*\n?([\s\S]*?)\n?\s*```$').firstMatch(s);
     if (m != null) s = m.group(1)!.trim();
-    final i = s.indexOf('<');
-    if (i > 0) s = s.substring(i);
+    if (_mode != 'task') {
+      final i = s.indexOf('<');
+      if (i > 0) s = s.substring(i);
+    }
     return s;
   }
 
@@ -279,7 +281,9 @@ class CreateScreenState extends State<CreateScreen> {
     });
 
     try {
-      final systemPrompt = await PromptBuilder.getSystemPrompt();
+      final systemPrompt = _mode == 'task'
+          ? await PromptBuilder.getTaskSystemPrompt()
+          : await PromptBuilder.getSystemPrompt();
       final response = await AiService.generate(
         provider: provider,
         systemPrompt: systemPrompt,
@@ -291,7 +295,7 @@ class CreateScreenState extends State<CreateScreen> {
         _conversation.add(ChatMessage(role: 'assistant', content: cleaned));
         _aiGenerating = false;
       });
-      if (cleaned.trim().startsWith('<')) _useThisHtml(cleaned);
+      if (_mode == 'task' || cleaned.trim().startsWith('<')) _useThisHtml(cleaned);
     } catch (e) {
       if (!mounted || thisGenId != _genId) return;
       setState(() => _aiGenerating = false);
@@ -312,7 +316,9 @@ class CreateScreenState extends State<CreateScreen> {
     });
 
     try {
-      final systemPrompt = await PromptBuilder.getSystemPrompt();
+      final systemPrompt = _mode == 'task'
+          ? await PromptBuilder.getTaskSystemPrompt()
+          : await PromptBuilder.getSystemPrompt();
       final response = await AiService.generate(
         provider: provider,
         systemPrompt: systemPrompt,
@@ -324,7 +330,7 @@ class CreateScreenState extends State<CreateScreen> {
         _conversation.add(ChatMessage(role: 'assistant', content: cleaned));
         _aiGenerating = false;
       });
-      if (cleaned.trim().startsWith('<')) _useThisHtml(cleaned);
+      if (_mode == 'task' || cleaned.trim().startsWith('<')) _useThisHtml(cleaned);
     } catch (e) {
       if (!mounted || thisGenId != _genId) return;
       setState(() => _aiGenerating = false);
@@ -422,10 +428,10 @@ class CreateScreenState extends State<CreateScreen> {
   Future<void> _buildAiApp() async {
     final label = _nameController.text.trim();
     final html = _htmlController.text.trim();
-    if (label.isEmpty || html.isEmpty) { _snack('Fill in name and paste HTML.'); return; }
+    if (label.isEmpty || html.isEmpty) { _snack('Fill in name and paste code.'); return; }
     if (label.length > 37 || label.codeUnits.length > 37) { _snack('Name too long (max 37 characters).'); return; }
-    if (!html.startsWith('<')) { _snack('HTML must start with < (e.g., <!DOCTYPE html>).'); return; }
-    await _doBuild(label, html, 'ai', description: _descController.text.trim(), prompt: _generatedPrompt);
+    if (_mode != 'task' && !html.startsWith('<')) { _snack('HTML must start with < (e.g., <!DOCTYPE html>).'); return; }
+    await _doBuild(label, html, _mode == 'task' ? 'task' : 'ai', description: _descController.text.trim(), prompt: _generatedPrompt);
   }
 
   Future<void> _buildDemo() async {
@@ -499,7 +505,7 @@ class CreateScreenState extends State<CreateScreen> {
         _editingId = appId; // set early so bundlePaths picks it up
       }
       final bundlePaths = await BundleStorage.paths(appId);
-      final result = await Generator.injectHtml(label: label, htmlContent: html, packageName: _existingPackageName, iconConfig: ic.toJsonString(), firebaseConfig: _firebaseConfig.isNotEmpty ? _firebaseConfig : null, onProgress: _addLog, webOnly: appType == 'web', bundleFiles: bundlePaths);
+      final result = await Generator.injectHtml(label: label, htmlContent: html, packageName: _existingPackageName, iconConfig: ic.toJsonString(), firebaseConfig: _firebaseConfig.isNotEmpty ? _firebaseConfig : null, onProgress: _addLog, webOnly: appType == 'web', taskOnly: appType == 'task', bundleFiles: bundlePaths);
       final now = DateTime.now();
       await AppStorage.save(AppData(
         id: appId, name: label,
@@ -569,8 +575,13 @@ class CreateScreenState extends State<CreateScreen> {
     if (name.isEmpty || desc.isEmpty) { _snack('Fill in name and description.'); return; }
     try {
       final existingHtml = _editingId != null ? _htmlController.text.trim() : null;
-      _generatedPrompt = await PromptBuilder.buildPrompt(appName: name, description: desc, existingHtml: existingHtml);
-      _generatedLinkedPrompt = await PromptBuilder.buildLinkedPrompt(appName: name, description: desc, existingHtml: existingHtml);
+      if (_mode == 'task') {
+        _generatedPrompt = await PromptBuilder.buildTaskPrompt(appName: name, description: desc, existingScript: existingHtml);
+        _generatedLinkedPrompt = await PromptBuilder.buildLinkedTaskPrompt(appName: name, description: desc, existingScript: existingHtml);
+      } else {
+        _generatedPrompt = await PromptBuilder.buildPrompt(appName: name, description: desc, existingHtml: existingHtml);
+        _generatedLinkedPrompt = await PromptBuilder.buildLinkedPrompt(appName: name, description: desc, existingHtml: existingHtml);
+      }
       setState(() { _promptVisible = true; _promptExpanded = true; _descExpanded = false; _htmlExpanded = true; });
     } catch (e) { _snack('Prompt generation failed: $e'); }
   }
@@ -669,6 +680,8 @@ class CreateScreenState extends State<CreateScreen> {
       const SizedBox(height: 20),
       h.buildModeCard(icon: Icons.auto_awesome, title: 'AI-generated App', subtitle: 'Describe what you want, generate with AI', onTap: () => setState(() => _mode = 'ai')),
       const SizedBox(height: 12),
+      h.buildModeCard(icon: Icons.terminal, title: 'Task-only App (V8)', subtitle: 'Automation script using V8 engine', onTap: () => setState(() => _mode = 'task')),
+      const SizedBox(height: 12),
       h.buildModeCard(icon: Icons.language, title: 'Website as App', subtitle: 'Turn any website into a standalone app', onTap: () => setState(() => _mode = 'web')),
       const SizedBox(height: 12),
       h.buildModeCard(icon: Icons.storefront_outlined, title: 'Showcase', subtitle: 'Community apps — ready to build', onTap: () => setState(() => _mode = 'showcase')),
@@ -698,7 +711,7 @@ class CreateScreenState extends State<CreateScreen> {
 
   Widget _formView() {
     final isEdit = _editingId != null;
-    final label = _mode == 'web' ? 'Website as App' : _mode == 'ai' ? 'AI App' : 'Demo App';
+    final label = _mode == 'web' ? 'Website as App' : _mode == 'task' ? 'Task App' : _mode == 'ai' ? 'AI App' : 'Demo App';
     return SingleChildScrollView(
       controller: _formScrollController,
       padding: const EdgeInsets.fromLTRB(24, 32, 24, 40),
@@ -763,7 +776,7 @@ class CreateScreenState extends State<CreateScreen> {
         const SizedBox(height: 20),
 
         if (_mode == 'web') _webFields(),
-        if (_mode == 'ai') _aiFields(),
+        if (_mode == 'ai' || _mode == 'task') _aiFields(),
         if (_mode == 'demo') _demoFields(),
       ]),
     );
@@ -1106,7 +1119,7 @@ class CreateScreenState extends State<CreateScreen> {
       _advancedSettings(),
 
       // Section: Preview & Build (both flows)
-      if (_htmlController.text.trim().startsWith('<') || _selectedHtml != null) ...[
+      if (_mode == 'task' || _htmlController.text.trim().startsWith('<') || _selectedHtml != null) ...[
         const SizedBox(height: 10),
         _section('Preview & Build', true, () {},
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

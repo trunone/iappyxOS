@@ -272,9 +272,30 @@ public class ShellActivity extends ComponentActivity {
         return flags;
     }
 
+    private boolean isTaskApp() {
+        try {
+            java.io.InputStream is = getAssets().open("app/is_task.txt");
+            if (is != null) {
+                is.close();
+                return true;
+            }
+        } catch (Exception ignored) {}
+        return false;
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        if (isTaskApp()) {
+            Intent taskIntent = new Intent(this, TaskActivity.class);
+            if (getIntent() != null && getIntent().getExtras() != null) {
+                taskIntent.putExtras(getIntent().getExtras());
+            }
+            startActivity(taskIntent);
+            finish();
+            return;
+        }
 
         applyWindowStyling();
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
