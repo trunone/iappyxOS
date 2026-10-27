@@ -290,7 +290,7 @@ class CreateScreenState extends State<CreateScreen> {
         messages: _conversation,
       );
       if (!mounted || thisGenId != _genId) return;
-      final cleaned = _mode == 'task' ? response.trim() : _stripMarkdownFences(response);
+      final cleaned = _stripMarkdownFences(response);
       setState(() {
         _conversation.add(ChatMessage(role: 'assistant', content: cleaned));
         _aiGenerating = false;
@@ -325,7 +325,7 @@ class CreateScreenState extends State<CreateScreen> {
         messages: _conversation,
       );
       if (!mounted || thisGenId != _genId) return;
-      final cleaned = _mode == 'task' ? response.trim() : _stripMarkdownFences(response);
+      final cleaned = _stripMarkdownFences(response);
       setState(() {
         _conversation.add(ChatMessage(role: 'assistant', content: cleaned));
         _aiGenerating = false;

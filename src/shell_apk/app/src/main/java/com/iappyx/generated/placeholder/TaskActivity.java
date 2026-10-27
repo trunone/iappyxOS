@@ -310,9 +310,14 @@ public class TaskActivity extends Activity {
         if (saved != null && !saved.trim().isEmpty()) {
             return saved;
         }
-        // Load from assets/app/index.html or assets/app/script.js
+        // Try reading app/script.js first, then fallback to app/index.html
         try {
-            InputStream is = getAssets().open("app/index.html");
+            InputStream is;
+            try {
+                is = getAssets().open("app/script.js");
+            } catch (Exception ignored) {
+                is = getAssets().open("app/index.html");
+            }
             BufferedReader reader = new BufferedReader(new InputStreamReader(is));
             StringBuilder sb = new StringBuilder();
             String line;
@@ -321,11 +326,6 @@ public class TaskActivity extends Activity {
             }
             is.close();
             String content = sb.toString().trim();
-            // If asset is JS or contains code
-            if (content.startsWith("<")) {
-                // Strip HTML wrappers if present
-                content = content.replaceAll("(?s)<script.*?>", "").replaceAll("</script>", "").replaceAll("(?s)<.*?>", "").trim();
-            }
             return content.isEmpty() ? getFallbackScript() : content;
         } catch (Exception e) {
             return getFallbackScript();
