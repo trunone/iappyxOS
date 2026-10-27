@@ -119,6 +119,12 @@
         android:hardwareAccelerated="true">
 
         <activity
+            android:name="com.iappyx.generated.placeholder.TaskActivity"
+            android:exported="true"
+            android:configChanges="orientation|keyboardHidden|screenSize"
+            android:launchMode="singleTop" />
+
+        <activity
             android:name="com.iappyx.generated.placeholder.ShellActivity"
             android:exported="true"
             android:configChanges="orientation|keyboardHidden|screenSize"

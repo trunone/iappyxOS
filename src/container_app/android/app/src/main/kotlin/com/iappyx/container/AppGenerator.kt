@@ -119,6 +119,7 @@ class AppGenerator(private val context: Context) {
         iconConfig: String? = null,
         firebaseConfig: String? = null,
         webOnly: Boolean = false,
+        taskOnly: Boolean = false,
         bundleFiles: Map<String, String> = emptyMap(),
         onProgress: (String) -> Unit,
     ): Map<String, String> {
@@ -138,6 +139,10 @@ class AppGenerator(private val context: Context) {
             val cleanHtml = htmlContent.replace("<!-- Built with iappyxOS — https://github.com/iappyx/iappyxOS -->\n", "")
             val taggedHtml = "<!-- Built with iappyxOS — https://github.com/iappyx/iappyxOS -->\n$cleanHtml"
             val assets = mutableMapOf("index.html" to taggedHtml.toByteArray(Charsets.UTF_8))
+            if (taskOnly) {
+                assets["is_task.txt"] = "1".toByteArray(Charsets.UTF_8)
+                assets["script.js"] = htmlContent.toByteArray(Charsets.UTF_8)
+            }
             if (!firebaseConfig.isNullOrBlank()) {
                 assets["firebase_config.json"] = firebaseConfig.toByteArray(Charsets.UTF_8)
             }
