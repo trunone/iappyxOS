@@ -52,6 +52,7 @@ class CreateScreen extends StatefulWidget {
 
 class CreateScreenState extends State<CreateScreen> {
   String? _mode;
+  bool _isTaskOnly = false;
   bool _isBuilding = false;
   bool _showBuildLog = false;
   final List<String> _log = [];
@@ -152,6 +153,8 @@ class CreateScreenState extends State<CreateScreen> {
         : app.templateId.isNotEmpty ? 'demo'
         : app.description.startsWith('Web app: ') ? 'web' : 'ai';
 
+    _isTaskOnly = type == 'task';
+
     if (type == 'web') {
       _urlController.text = app.description.replaceFirst('Web app: ', '');
       _urlError = null;
@@ -170,6 +173,7 @@ class CreateScreenState extends State<CreateScreen> {
   void _reset() {
     setState(() {
       _mode = null;
+      _isTaskOnly = false;
       _isBuilding = false;
       _showBuildLog = false;
       _nameController.clear();
@@ -213,7 +217,7 @@ class CreateScreenState extends State<CreateScreen> {
     var s = text.trim();
     final m = RegExp(r'^```(?:html|js|javascript)?\s*\n?([\s\S]*?)\n?\s*```$').firstMatch(s);
     if (m != null) s = m.group(1)!.trim();
-    if (_mode != 'task') {
+    if (!_isTaskOnly) {
       final i = s.indexOf('<');
       if (i > 0) s = s.substring(i);
     }
@@ -281,7 +285,7 @@ class CreateScreenState extends State<CreateScreen> {
     });
 
     try {
-      final systemPrompt = _mode == 'task'
+      final systemPrompt = _isTaskOnly
           ? await PromptBuilder.getTaskSystemPrompt()
           : await PromptBuilder.getSystemPrompt();
       final response = await AiService.generate(
@@ -295,7 +299,7 @@ class CreateScreenState extends State<CreateScreen> {
         _conversation.add(ChatMessage(role: 'assistant', content: cleaned));
         _aiGenerating = false;
       });
-      if (_mode == 'task' || cleaned.trim().startsWith('<')) _useThisHtml(cleaned);
+      if (_isTaskOnly || cleaned.trim().startsWith('<')) _useThisHtml(cleaned);
     } catch (e) {
       if (!mounted || thisGenId != _genId) return;
       setState(() => _aiGenerating = false);
@@ -316,7 +320,7 @@ class CreateScreenState extends State<CreateScreen> {
     });
 
     try {
-      final systemPrompt = _mode == 'task'
+      final systemPrompt = _isTaskOnly
           ? await PromptBuilder.getTaskSystemPrompt()
           : await PromptBuilder.getSystemPrompt();
       final response = await AiService.generate(
@@ -330,7 +334,7 @@ class CreateScreenState extends State<CreateScreen> {
         _conversation.add(ChatMessage(role: 'assistant', content: cleaned));
         _aiGenerating = false;
       });
-      if (_mode == 'task' || cleaned.trim().startsWith('<')) _useThisHtml(cleaned);
+      if (_isTaskOnly || cleaned.trim().startsWith('<')) _useThisHtml(cleaned);
     } catch (e) {
       if (!mounted || thisGenId != _genId) return;
       setState(() => _aiGenerating = false);
@@ -430,8 +434,8 @@ class CreateScreenState extends State<CreateScreen> {
     final html = _htmlController.text.trim();
     if (label.isEmpty || html.isEmpty) { _snack('Fill in name and paste code.'); return; }
     if (label.length > 37 || label.codeUnits.length > 37) { _snack('Name too long (max 37 characters).'); return; }
-    if (_mode != 'task' && !html.startsWith('<')) { _snack('HTML must start with < (e.g., <!DOCTYPE html>).'); return; }
-    await _doBuild(label, html, _mode == 'task' ? 'task' : 'ai', description: _descController.text.trim(), prompt: _generatedPrompt);
+    if (!_isTaskOnly && !html.startsWith('<')) { _snack('HTML must start with < (e.g., <!DOCTYPE html>).'); return; }
+    await _doBuild(label, html, _isTaskOnly ? 'task' : 'ai', description: _descController.text.trim(), prompt: _generatedPrompt);
   }
 
   Future<void> _buildDemo() async {
@@ -575,7 +579,7 @@ class CreateScreenState extends State<CreateScreen> {
     if (name.isEmpty || desc.isEmpty) { _snack('Fill in name and description.'); return; }
     try {
       final existingHtml = _editingId != null ? _htmlController.text.trim() : null;
-      if (_mode == 'task') {
+      if (_isTaskOnly) {
         _generatedPrompt = await PromptBuilder.buildTaskPrompt(appName: name, description: desc, existingScript: existingHtml);
         _generatedLinkedPrompt = await PromptBuilder.buildLinkedTaskPrompt(appName: name, description: desc, existingScript: existingHtml);
       } else {
@@ -680,8 +684,6 @@ class CreateScreenState extends State<CreateScreen> {
       const SizedBox(height: 20),
       h.buildModeCard(icon: Icons.auto_awesome, title: 'AI-generated App', subtitle: 'Describe what you want, generate with AI', onTap: () => setState(() => _mode = 'ai')),
       const SizedBox(height: 12),
-      h.buildModeCard(icon: Icons.terminal, title: 'Task-only App (V8)', subtitle: 'Automation script using V8 engine', onTap: () => setState(() => _mode = 'task')),
-      const SizedBox(height: 12),
       h.buildModeCard(icon: Icons.language, title: 'Website as App', subtitle: 'Turn any website into a standalone app', onTap: () => setState(() => _mode = 'web')),
       const SizedBox(height: 12),
       h.buildModeCard(icon: Icons.storefront_outlined, title: 'Showcase', subtitle: 'Community apps — ready to build', onTap: () => setState(() => _mode = 'showcase')),
@@ -711,7 +713,7 @@ class CreateScreenState extends State<CreateScreen> {
 
   Widget _formView() {
     final isEdit = _editingId != null;
-    final label = _mode == 'web' ? 'Website as App' : _mode == 'task' ? 'Task App' : _mode == 'ai' ? 'AI App' : 'Demo App';
+    final label = _mode == 'web' ? 'Website as App' : _mode == 'ai' ? (_isTaskOnly ? 'Task App' : 'AI App') : 'Demo App';
     return SingleChildScrollView(
       controller: _formScrollController,
       padding: const EdgeInsets.fromLTRB(24, 32, 24, 40),
@@ -776,7 +778,7 @@ class CreateScreenState extends State<CreateScreen> {
         const SizedBox(height: 20),
 
         if (_mode == 'web') _webFields(),
-        if (_mode == 'ai' || _mode == 'task') _aiFields(),
+        if (_mode == 'ai') _aiFields(),
         if (_mode == 'demo') _demoFields(),
       ]),
     );
@@ -811,6 +813,63 @@ class CreateScreenState extends State<CreateScreen> {
   Widget _aiFields() {
     if (_activeProvider == null && !_loadingProvider) _loadActiveProvider();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      // App Type Choice: Standard UI vs Task-Only V8
+      Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1A2E),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('App Mode', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white54)),
+          const SizedBox(height: 8),
+          Row(children: [
+            Expanded(child: GestureDetector(
+              onTap: () => setState(() => _isTaskOnly = false),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                decoration: BoxDecoration(
+                  color: !_isTaskOnly ? const Color(0xFF0F3460) : const Color(0xFF0D0D1A),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: !_isTaskOnly ? const Color(0xFF4FC3F7) : Colors.transparent),
+                ),
+                child: Column(children: [
+                  Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Icon(Icons.web, size: 16, color: !_isTaskOnly ? const Color(0xFF4FC3F7) : Colors.white38),
+                    const SizedBox(width: 6),
+                    Text('Standard App', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: !_isTaskOnly ? Colors.white : Colors.white54)),
+                  ]),
+                  const SizedBox(height: 2),
+                  Text('HTML/JS UI app', style: TextStyle(fontSize: 10, color: !_isTaskOnly ? Colors.white38 : Colors.white24)),
+                ]),
+              ),
+            )),
+            const SizedBox(width: 8),
+            Expanded(child: GestureDetector(
+              onTap: () => setState(() => _isTaskOnly = true),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                decoration: BoxDecoration(
+                  color: _isTaskOnly ? const Color(0xFF0F3460) : const Color(0xFF0D0D1A),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: _isTaskOnly ? const Color(0xFF4FC3F7) : Colors.transparent),
+                ),
+                child: Column(children: [
+                  Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Icon(Icons.terminal, size: 16, color: _isTaskOnly ? const Color(0xFF4FC3F7) : Colors.white38),
+                    const SizedBox(width: 6),
+                    Text('Task App', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _isTaskOnly ? Colors.white : Colors.white54)),
+                  ]),
+                  const SizedBox(height: 2),
+                  Text('Automation script', style: TextStyle(fontSize: 10, color: _isTaskOnly ? Colors.white38 : Colors.white24)),
+                ]),
+              ),
+            )),
+          ]),
+        ]),
+      ),
+
       // Section 1: Describe
       _section('Describe your app', _descExpanded, () => setState(() => _descExpanded = !_descExpanded),
         done: _genMethod.isNotEmpty || _generatedPrompt.isNotEmpty,
@@ -818,7 +877,10 @@ class CreateScreenState extends State<CreateScreen> {
           const SizedBox(height: 8),
           Stack(children: [
             TextField(controller: _descController, style: const TextStyle(color: Colors.white), maxLines: 4,
-              decoration: const InputDecoration(hintText: 'What should the app do?', contentPadding: EdgeInsets.fromLTRB(12, 12, 48, 12)),
+              decoration: InputDecoration(
+                hintText: _isTaskOnly ? 'What background task or automation script should be created?' : 'What should the app do?',
+                contentPadding: const EdgeInsets.fromLTRB(12, 12, 48, 12),
+              ),
               textCapitalization: TextCapitalization.sentences),
             Positioned(right: 4, bottom: 4, child: GestureDetector(
               onTap: _voiceInput,
@@ -1030,14 +1092,16 @@ class CreateScreenState extends State<CreateScreen> {
         ],
         const SizedBox(height: 10),
         _section('Paste the AI response', _htmlExpanded, () => setState(() => _htmlExpanded = !_htmlExpanded),
-          done: _htmlController.text.trim().startsWith('<'),
+        done: _isTaskOnly ? _htmlController.text.trim().isNotEmpty : _htmlController.text.trim().startsWith('<'),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             const SizedBox(height: 8),
-            const Text('Paste the HTML code from the AI response. The code should be a complete HTML file starting with <!DOCTYPE html>.',
-                style: TextStyle(fontSize: 11, color: Colors.white38)),
+          Text(_isTaskOnly
+              ? 'Paste the JavaScript V8 code from the AI response.'
+              : 'Paste the HTML code from the AI response. The code should be a complete HTML file starting with <!DOCTYPE html>.',
+              style: const TextStyle(fontSize: 11, color: Colors.white38)),
             const SizedBox(height: 8),
             TextField(controller: _htmlController, style: const TextStyle(fontSize: 11, fontFamily: 'monospace', color: Colors.white),
-              maxLines: 8, decoration: const InputDecoration(hintText: 'Paste HTML here...', hintStyle: TextStyle(fontFamily: 'monospace'))),
+            maxLines: 8, decoration: InputDecoration(hintText: _isTaskOnly ? 'Paste JavaScript code here...' : 'Paste HTML here...', hintStyle: const TextStyle(fontFamily: 'monospace'))),
             const SizedBox(height: 10),
             Row(children: [
               Expanded(child: OutlinedButton.icon(
@@ -1119,7 +1183,7 @@ class CreateScreenState extends State<CreateScreen> {
       _advancedSettings(),
 
       // Section: Preview & Build (both flows)
-      if (_mode == 'task' || _htmlController.text.trim().startsWith('<') || _selectedHtml != null) ...[
+      if (_isTaskOnly || _htmlController.text.trim().startsWith('<') || _selectedHtml != null) ...[
         const SizedBox(height: 10),
         _section('Preview & Build', true, () {},
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
