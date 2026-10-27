@@ -859,7 +859,7 @@ class CreateScreenState extends State<CreateScreen> {
                   Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                     Icon(Icons.terminal, size: 16, color: _isTaskOnly ? const Color(0xFF4FC3F7) : Colors.white38),
                     const SizedBox(width: 6),
-                    Text('Task-only (V8)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _isTaskOnly ? Colors.white : Colors.white54)),
+                    Text('Task App', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _isTaskOnly ? Colors.white : Colors.white54)),
                   ]),
                   const SizedBox(height: 2),
                   Text('Automation script', style: TextStyle(fontSize: 10, color: _isTaskOnly ? Colors.white38 : Colors.white24)),
