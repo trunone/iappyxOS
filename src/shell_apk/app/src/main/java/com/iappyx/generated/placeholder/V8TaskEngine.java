@@ -32,6 +32,7 @@ import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 
 import androidx.javascriptengine.JavaScriptConsoleCallback;
+import androidx.javascriptengine.JavaScriptConsoleMessage;
 import androidx.javascriptengine.JavaScriptIsolate;
 import androidx.javascriptengine.JavaScriptSandbox;
 
@@ -89,12 +90,12 @@ public class V8TaskEngine {
                         isolate = sandbox.createIsolate();
 
                         // Register console callback
-                        isolate.addJavaScriptConsoleCallback(executor, (iso, message) -> {
+                        isolate.setConsoleCallback(executor, message -> {
                             String type = "log";
                             int level = message.getLevels();
-                            if ((level & JavaScriptConsoleCallback.ConsoleMessage.LEVEL_ERROR) != 0) type = "error";
-                            else if ((level & JavaScriptConsoleCallback.ConsoleMessage.LEVEL_WARN) != 0) type = "warn";
-                            else if ((level & JavaScriptConsoleCallback.ConsoleMessage.LEVEL_INFO) != 0) type = "info";
+                            if ((level & JavaScriptConsoleMessage.LEVEL_ERROR) != 0) type = "error";
+                            else if ((level & JavaScriptConsoleMessage.LEVEL_WARNING) != 0) type = "warn";
+                            else if ((level & JavaScriptConsoleMessage.LEVEL_INFO) != 0) type = "info";
 
                             final String finalType = type;
                             final String msgText = message.getMessage();
