@@ -100,6 +100,38 @@ public class BridgeUtils {
 
     private static final String NOTIF_CH = "iappyx";
 
+    public static void vibrate(Context ctx, String ms) {
+        try {
+            android.os.Vibrator v = (android.os.Vibrator) ctx.getSystemService(Context.VIBRATOR_SERVICE);
+            if (v == null) return;
+            long dur = Long.parseLong(ms);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                v.vibrate(android.os.VibrationEffect.createOneShot(dur, android.os.VibrationEffect.DEFAULT_AMPLITUDE));
+            } else {
+                v.vibrate(dur);
+            }
+        } catch (Exception ignored) {}
+    }
+
+    public static void ttsSpeak(Context ctx, String text) {
+        try {
+            android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
+            handler.post(() -> android.widget.Toast.makeText(ctx, text, android.widget.Toast.LENGTH_SHORT).show());
+        } catch (Exception ignored) {}
+    }
+
+    public static String getDeviceInfo(Context ctx) {
+        try {
+            JSONObject obj = new JSONObject();
+            obj.put("brand", Build.BRAND);
+            obj.put("model", Build.MODEL);
+            obj.put("sdk", Build.VERSION.SDK_INT);
+            return obj.toString();
+        } catch (Exception e) {
+            return "{}";
+        }
+    }
+
     public static void sendNotification(Context ctx, String title, String body) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel ch = new NotificationChannel(NOTIF_CH, "iappyxOS", NotificationManager.IMPORTANCE_DEFAULT);

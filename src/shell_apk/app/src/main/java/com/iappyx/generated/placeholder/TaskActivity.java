@@ -237,7 +237,7 @@ public class TaskActivity extends Activity {
         switchTab(true);
     }
 
-    private void switchTab(bool showScript) {
+    private void switchTab(boolean showScript) {
         isScriptTabActive = showScript;
         scriptViewLayout.setVisibility(showScript ? View.VISIBLE : View.GONE);
         consoleViewLayout.setVisibility(showScript ? View.GONE : View.VISIBLE);
