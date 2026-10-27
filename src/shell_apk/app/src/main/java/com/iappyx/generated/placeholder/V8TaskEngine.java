@@ -91,7 +91,7 @@ public class V8TaskEngine {
                         // Register console callback
                         isolate.setConsoleCallback(executor, message -> {
                             String type = "log";
-                            int level = message.getLevels();
+                            int level = message.getLevel();
                             if ((level & JavaScriptConsoleCallback.ConsoleMessage.LEVEL_ERROR) != 0) type = "error";
                             else if ((level & JavaScriptConsoleCallback.ConsoleMessage.LEVEL_WARNING) != 0) type = "warn";
                             else if ((level & JavaScriptConsoleCallback.ConsoleMessage.LEVEL_INFO) != 0) type = "info";
