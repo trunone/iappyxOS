@@ -309,7 +309,7 @@
 
         <!-- Shizuku Provider -->
         <provider
-            android:name="rikka.shizuku.provider.ShizukuProvider"
+            android:name="rikka.shizuku.ShizukuProvider"
             android:authorities="${applicationId}.shizuku"
             android:multiprocess="false"
             android:enabled="true"
