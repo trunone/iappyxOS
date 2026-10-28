@@ -44,6 +44,7 @@ Pre-built HTML apps that demonstrate iappyxOS native bridges and capabilities. E
 | `soundtools.html` | Sound Tools | Real-time mic spectrum, sound effects, volume streams |
 | `printexport.html` | Print & Export | Print to PDF, save to Downloads, share files |
 | `accessibilitydemo.html` | Accessibility | Screen inspection, automation & gestures |
+| `shizukudemo.html` | Shizuku | System shell execution with ADB/Root privileges |
 
 ## Usage
 

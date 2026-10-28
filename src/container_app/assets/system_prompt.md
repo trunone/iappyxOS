@@ -378,6 +378,14 @@ Rule: if a trigger callback calls `launchApp`, the app MUST call `requestOverlay
 `iappyx.accessibility.clickAt(x, y [, durationMs])` → bool — dispatch tap gesture at screen coordinates (x, y in pixels).
 `iappyx.accessibility.swipe(startX, startY, endX, endY [, durationMs])` → bool — dispatch swipe gesture across screen coordinates.
 
+### Shizuku (system-level shell execution with ADB/Root privileges)
+`iappyx.shizuku.isAvailable()` → bool (sync) — returns true if Shizuku service is running
+`iappyx.shizuku.hasPermission()` → bool (sync) — returns true if Shizuku permission is granted
+`iappyx.shizuku.requestPermission(cbId)` → `{ok, granted:bool}` — request Shizuku permission from user
+`iappyx.shizuku.getVersion()` → int (sync) — Shizuku server version
+`iappyx.shizuku.getUid()` → int (sync) — Shizuku server UID (2000 for ADB, 0 for Root, -1 if unavailable)
+`iappyx.shizuku.exec(command, cbId)` → `{ok, exitCode, stdout, stderr}` — execute shell command with elevated ADB/Root privileges
+
 ### Contacts (async, cbId pattern)
 `iappyx.contacts.getContacts(cbId)` → `{ok,contacts:[{name,phones:[],emails:[]}]}`
 

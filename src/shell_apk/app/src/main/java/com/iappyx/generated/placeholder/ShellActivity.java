@@ -387,6 +387,7 @@ public class ShellActivity extends ComponentActivity {
         webView.addJavascriptInterface(new TriggerBridge(),      "iappyxTrigger");
         webView.addJavascriptInterface(new IntentBridge(),       "iappyxIntent");
         webView.addJavascriptInterface(new AccessibilityBridge(),"iappyxAccessibility");
+        webView.addJavascriptInterface(new ShizukuBridge(),      "iappyxShizuku");
         // Register trigger receivers dynamically for the life of this process.
         // Unconditional because on Android 15+ static manifest receivers for charger/
         // headphones appear to be suppressed silently — dynamic registration works.
@@ -533,6 +534,7 @@ public class ShellActivity extends ComponentActivity {
                     "trigger:iappyxTrigger," +
                     "intent:iappyxIntent," +
                     "accessibility:iappyxAccessibility," +
+                    "shizuku:iappyxShizuku," +
                     "capabilities:function(){return JSON.parse(iappyxCapabilities.get())}," +
                     "onTextSelected:function(fn){document.addEventListener('selectionchange',function(){" +
                     "var s=window.getSelection();if(s&&s.toString().trim().length>0){fn({text:s.toString().trim()})}" +
@@ -8375,6 +8377,9 @@ public class ShellActivity extends ComponentActivity {
                 bridges.put("bluetooth", true);
                 bridges.put("trigger", true);
                 bridges.put("accessibility", AppAccessibilityService.isServiceRunning());
+                boolean shizukuAvail = false;
+                try { shizukuAvail = rikka.shizuku.Shizuku.pingBinder(); } catch (Throwable ignored) {}
+                bridges.put("shizuku", shizukuAvail);
                 caps.put("bridges", bridges);
 
                 JSONObject perms = new JSONObject();
@@ -9036,6 +9041,141 @@ public class ShellActivity extends ComponentActivity {
                     Log.w("iappyxOS", "requestOverlayPermission: " + e.getMessage());
                 }
             });
+        }
+    }
+
+    class ShizukuBridge {
+        @JavascriptInterface
+        public boolean isAvailable() {
+            try {
+                return rikka.shizuku.Shizuku.pingBinder();
+            } catch (Throwable e) {
+                return false;
+            }
+        }
+
+        @JavascriptInterface
+        public boolean hasPermission() {
+            try {
+                if (rikka.shizuku.Shizuku.isPreV11()) return false;
+                return rikka.shizuku.Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED;
+            } catch (Throwable e) {
+                return false;
+            }
+        }
+
+        @JavascriptInterface
+        public int getVersion() {
+            try {
+                return rikka.shizuku.Shizuku.getVersion();
+            } catch (Throwable e) {
+                return -1;
+            }
+        }
+
+        @JavascriptInterface
+        public int getUid() {
+            try {
+                return rikka.shizuku.Shizuku.getUid();
+            } catch (Throwable e) {
+                return -1;
+            }
+        }
+
+        @JavascriptInterface
+        public void requestPermission(final String cbId) {
+            if (!isSafeCallbackName(cbId)) return;
+            try {
+                if (rikka.shizuku.Shizuku.isPreV11()) {
+                    deliverResult(cbId, "{\"ok\":false,\"granted\":false,\"error\":\"Pre-v11 unsupported\"}");
+                    return;
+                }
+                if (rikka.shizuku.Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
+                    deliverResult(cbId, "{\"ok\":true,\"granted\":true}");
+                    return;
+                }
+                final int reqCode = (int) (System.currentTimeMillis() & 0xFFFF);
+                final rikka.shizuku.Shizuku.OnRequestPermissionResultListener listener =
+                    new rikka.shizuku.Shizuku.OnRequestPermissionResultListener() {
+                        @Override
+                        public void onRequestPermissionResult(int requestCode, int grantResult) {
+                            if (requestCode == reqCode) {
+                                boolean granted = grantResult == PackageManager.PERMISSION_GRANTED;
+                                deliverResult(cbId, "{\"ok\":" + granted + ",\"granted\":" + granted + "}");
+                                try {
+                                    rikka.shizuku.Shizuku.removeRequestPermissionResultListener(this);
+                                } catch (Throwable ignored) {}
+                            }
+                        }
+                    };
+                rikka.shizuku.Shizuku.addRequestPermissionResultListener(listener);
+                rikka.shizuku.Shizuku.requestPermission(reqCode);
+            } catch (Throwable e) {
+                deliverResult(cbId, "{\"ok\":false,\"error\":" + JSONObject.quote(e.getMessage() != null ? e.getMessage() : e.toString()) + "}");
+            }
+        }
+
+        @JavascriptInterface
+        public void exec(final String command, final String cbId) {
+            if (!isSafeCallbackName(cbId)) return;
+            new Thread(() -> {
+                try {
+                    if (!isAvailable()) {
+                        deliverResult(cbId, "{\"ok\":false,\"error\":\"Shizuku service not available\"}");
+                        return;
+                    }
+                    if (!hasPermission()) {
+                        deliverResult(cbId, "{\"ok\":false,\"error\":\"Shizuku permission not granted\"}");
+                        return;
+                    }
+                    java.lang.reflect.Method m = rikka.shizuku.Shizuku.class.getDeclaredMethod("newProcess", String[].class, String[].class, String.class);
+                    m.setAccessible(true);
+                    Process proc = (Process) m.invoke(null, new String[]{"sh", "-c", command}, null, null);
+
+                    java.io.BufferedReader stdoutReader = new java.io.BufferedReader(new java.io.InputStreamReader(proc.getInputStream()));
+                    java.io.BufferedReader stderrReader = new java.io.BufferedReader(new java.io.InputStreamReader(proc.getErrorStream()));
+
+                    StringBuilder stdoutSb = new StringBuilder();
+                    StringBuilder stderrSb = new StringBuilder();
+
+                    Thread t1 = new Thread(() -> {
+                        try {
+                            String line;
+                            while ((line = stdoutReader.readLine()) != null) {
+                                if (stdoutSb.length() > 0) stdoutSb.append("\n");
+                                stdoutSb.append(line);
+                            }
+                        } catch (Exception ignored) {}
+                    });
+
+                    Thread t2 = new Thread(() -> {
+                        try {
+                            String line;
+                            while ((line = stderrReader.readLine()) != null) {
+                                if (stderrSb.length() > 0) stderrSb.append("\n");
+                                stderrSb.append(line);
+                            }
+                        } catch (Exception ignored) {}
+                    });
+
+                    t1.start();
+                    t2.start();
+
+                    int exitCode = proc.waitFor();
+                    t1.join(1000);
+                    t2.join(1000);
+
+                    JSONObject result = new JSONObject();
+                    result.put("ok", exitCode == 0);
+                    result.put("exitCode", exitCode);
+                    result.put("stdout", stdoutSb.toString());
+                    result.put("stderr", stderrSb.toString());
+
+                    deliverResult(cbId, result.toString());
+                } catch (Throwable e) {
+                    deliverResult(cbId, "{\"ok\":false,\"error\":" + JSONObject.quote(e.getMessage() != null ? e.getMessage() : e.toString()) + "}");
+                }
+            }).start();
         }
     }
 }

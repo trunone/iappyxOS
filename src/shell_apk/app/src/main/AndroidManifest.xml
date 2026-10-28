@@ -307,5 +307,13 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- Shizuku Provider -->
+        <provider
+            android:name="rikka.shizuku.provider.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false"
+            android:enabled="true"
+            android:exported="true" />
+
     </application>
 </manifest>

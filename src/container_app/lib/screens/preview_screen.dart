@@ -355,7 +355,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
       bridges:{storage:true,device:true,vibration:true,clipboard:true,notification:true,
         screen:true,tts:true,audio:true,sensor:true,alarm:true,sqlite:true,
         tasks:true,widget:true,capabilities:true,
-        trigger:true,intent:true,accessibility:false,
+        trigger:true,intent:true,accessibility:false,shizuku:false,
         camera:false,location:false,contacts:false,sms:false,calendar:false,
         biometric:false,nfc:false,ble:false,bluetooth:false,ssh:false,smb:false,
         httpServer:false,httpClient:false,tcp:false,udp:false,nsd:false,
@@ -629,6 +629,28 @@ class _PreviewScreenState extends State<PreviewScreen> {
     ]);}
   };
 
+  // Shizuku — simulated stub for preview mode.
+  var shizuku={
+    isAvailable:function(){return false;},
+    hasPermission:function(){return false;},
+    getVersion:function(){return -1;},
+    getUid:function(){return -1;},
+    requestPermission:function(cbId){
+      var safeCb=cbId;if(safeCb&&safeCb.indexOf('window._iappyxCb.')===0)safeCb=safeCb.substring(17);
+      if(window._iappyxCb&&window._iappyxCb[safeCb]){
+        window._iappyxCb[safeCb]({ok:false,granted:false,error:'Shizuku unavailable in preview'});
+        delete window._iappyxCb[safeCb];
+      }
+    },
+    exec:function(cmd,cbId){
+      var safeCb=cbId;if(safeCb&&safeCb.indexOf('window._iappyxCb.')===0)safeCb=safeCb.substring(17);
+      if(window._iappyxCb&&window._iappyxCb[safeCb]){
+        window._iappyxCb[safeCb]({ok:false,exitCode:1,stdout:'',stderr:'Shizuku unavailable in preview',error:'Shizuku unavailable in preview'});
+        delete window._iappyxCb[safeCb];
+      }
+    }
+  };
+
   // ── Assemble the iappyx object (same structure as ShellActivity wrapper) ──
   window.iappyx={
     storage:storage, device:device, camera:camera,
@@ -643,7 +665,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
     tcp:tcp, udp:udp, nsd:nsd,
     wifiDirect:wifiDirect, push:push,
     download:download, media:media, bluetooth:bluetooth, tasks:tasks, widget:widget,
-    trigger:trigger, intent:intent, accessibility:accessibility,
+    trigger:trigger, intent:intent, accessibility:accessibility, shizuku:shizuku,
     // Top-level convenience methods (same as ShellActivity)
     save:function(k,v){storage.save(k,v);},
     load:function(k){return storage.load(k);},
