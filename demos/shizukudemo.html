@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Shizuku Demo</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+*:focus{outline:none}
+body{background:#0d0d1a;color:#eaeaea;font-family:-apple-system,sans-serif;padding:20px;min-height:100vh}
+h2{font-size:18px;margin-bottom:16px;text-align:center}
+.section{background:#1a1a2e;border-radius:14px;padding:16px;margin-bottom:16px}
+.section h3{font-size:14px;color:#4FC3F7;margin-bottom:12px}
+.desc{font-size:12px;color:rgba(255,255,255,0.4);margin-bottom:12px;line-height:1.5}
+.btn{background:#0f3460;color:#fff;border:none;padding:12px 20px;border-radius:10px;font-size:14px;width:100%;margin-bottom:8px;cursor:pointer}
+.btn:active{opacity:0.7}
+.btn.outline{background:transparent;border:1px solid #0f3460;color:#4FC3F7}
+.btn.sm{padding:8px 12px;font-size:12px;width:auto}
+.log{background:#0d0d1a;border-radius:8px;padding:12px;font-size:11px;color:rgba(255,255,255,0.7);max-height:220px;overflow-y:auto;font-family:monospace;line-height:1.6;white-space:pre-wrap;word-break:break-all}
+.status{font-size:13px;text-align:center;margin-bottom:12px;padding:10px;border-radius:8px;background:#0d0d1a}
+.status.on{color:#69F0AE;border:1px solid rgba(105,240,174,0.3)}
+.status.off{color:#FF6B6B;border:1px solid rgba(255,107,107,0.3)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+input{width:100%;background:#0d0d1a;border:1px solid rgba(255,255,255,0.1);color:#fff;padding:10px 12px;border-radius:8px;font-size:13px;margin-bottom:8px;font-family:monospace}
+</style></head><body>
+<h2>Shizuku Demo</h2>
+
+<div class="section">
+  <h3>Shizuku Status</h3>
+  <div id="status" class="status off">Checking status...</div>
+  <div class="desc" id="info">UID: - | Version: -</div>
+  <button class="btn" onclick="checkStatus()">Refresh Status</button>
+  <button class="btn outline" onclick="requestPerm()">Request Permission</button>
+</div>
+
+<div class="section">
+  <h3>Run Shell Command</h3>
+  <div class="desc">Execute commands with ADB (UID 2000) or Root (UID 0) privileges.</div>
+  <input id="cmdInput" type="text" value="getprop ro.build.version.release" placeholder="Enter shell command...">
+  <button class="btn" onclick="runCmd()">Execute Command</button>
+  <div class="grid">
+    <button class="btn sm outline" onclick="setCmd('getprop ro.product.model')">Get Model</button>
+    <button class="btn sm outline" onclick="setCmd('dumpsys battery | grep level')">Battery Level</button>
+    <button class="btn sm outline" onclick="setCmd('pm list packages | head -n 10')">List Packages</button>
+    <button class="btn sm outline" onclick="setCmd('id')">Check ID</button>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Output / Log</h3>
+  <div id="log" class="log">Awaiting actions...</div>
+</div>
+
+<script>
+function _init(){if(typeof iappyx==='undefined'){setTimeout(_init,50);return;}onReady();}
+window.addEventListener('load',function(){setTimeout(_init,200)});
+
+function log(msg){
+  var el=document.getElementById('log');
+  var time=new Date().toLocaleTimeString();
+  el.innerHTML='['+time+'] '+msg+'\n'+el.innerHTML;
+}
+
+function checkStatus(){
+  if(!iappyx||!iappyx.shizuku){
+    log('Shizuku bridge unavailable');
+    document.getElementById('status').className='status off';
+    document.getElementById('status').textContent='Shizuku Bridge Unavailable';
+    return;
+  }
+  var avail=iappyx.shizuku.isAvailable();
+  var perm=iappyx.shizuku.hasPermission();
+  var ver=iappyx.shizuku.getVersion();
+  var uid=iappyx.shizuku.getUid();
+
+  var st=document.getElementById('status');
+  if(avail && perm){
+    st.className='status on';
+    st.textContent='Shizuku Active & Granted';
+  }else if(avail){
+    st.className='status off';
+    st.textContent='Shizuku Running (Permission Required)';
+  }else{
+    st.className='status off';
+    st.textContent='Shizuku Service Not Running';
+  }
+  document.getElementById('info').textContent='UID: '+(uid>=0?uid:'-')+' | Version: '+(ver>=0?ver:'-');
+  log('Available: '+avail+', Permission: '+perm+', Version: '+ver+', UID: '+uid);
+}
+
+function requestPerm(){
+  if(!iappyx||!iappyx.shizuku){log('Shizuku bridge unavailable');return;}
+  var cbId='req_'+Date.now();
+  window._iappyxCb=window._iappyxCb||{};
+  window._iappyxCb[cbId]=function(res){
+    if(res.ok && res.granted){
+      log('Permission granted!');
+    }else{
+      log('Permission denied/failed: '+(res.error||'Not granted'));
+    }
+    checkStatus();
+  };
+  log('Requesting Shizuku permission...');
+  iappyx.shizuku.requestPermission(cbId);
+}
+
+function setCmd(cmd){
+  document.getElementById('cmdInput').value=cmd;
+}
+
+function runCmd(){
+  if(!iappyx||!iappyx.shizuku){log('Shizuku bridge unavailable');return;}
+  var cmd=document.getElementById('cmdInput').value.trim();
+  if(!cmd){log('Please enter a command');return;}
+
+  var cbId='exec_'+Date.now();
+  window._iappyxCb=window._iappyxCb||{};
+  window._iappyxCb[cbId]=function(res){
+    if(res.ok){
+      log('$ '+cmd+'\n[exit code: '+res.exitCode+']\n'+(res.stdout||'(no stdout)'));
+    }else{
+      log('Command failed: '+(res.error||res.stderr||'Unknown error'));
+    }
+  };
+  log('Executing: '+cmd);
+  iappyx.shizuku.exec(cmd, cbId);
+}
+
+function onReady(){
+  checkStatus();
+}
+</script>
+</body></html>

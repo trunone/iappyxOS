@@ -58,6 +58,7 @@ class ApkInjector(private val keystoreAlias: String = "iappyx_signing_key") {
         private const val TEMPLATE_MLKIT   = "com.iappyx.generated.placeholderx.xxxxxxxx.mlkitinitprovider"
         private const val TEMPLATE_FIREBASE = "com.iappyx.generated.placeholderx.xxxxxxxx.firebaseinitprovider"
         private const val TEMPLATE_STARTUP = "com.iappyx.generated.placeholderx.xxxxxxxx.androidx-startup"
+        private const val TEMPLATE_SHIZUKU = "com.iappyx.generated.placeholderx.xxxxxxxx.shizuku"
 
         // These must be STORED (uncompressed) AND 4-byte aligned
         private val STORED_ALIGNED = setOf("AndroidManifest.xml", "resources.arsc")
@@ -269,6 +270,7 @@ class ApkInjector(private val keystoreAlias: String = "iappyx_signing_key") {
         val mlkit = "$packageName.mlkitinitprovider"
         val firebase = "$packageName.firebaseinitprovider"
         val startup = "$packageName.androidx-startup"
+        val shizuku = "$packageName.shizuku"
         var r = data
         // Order matters: patch longer strings first to avoid partial matches
         r = replaceAllUtf16(r, TEMPLATE_DYNPERM,   dynPerm)
@@ -276,6 +278,7 @@ class ApkInjector(private val keystoreAlias: String = "iappyx_signing_key") {
         r = replaceAllUtf16(r, TEMPLATE_STARTUP,   startup)
         r = replaceAllUtf16(r, TEMPLATE_MLKIT,     mlkit)
         r = replaceAllUtf16(r, TEMPLATE_AUTHORITY, authority)
+        r = replaceAllUtf16(r, TEMPLATE_SHIZUKU,   shizuku)
         r = replaceAllUtf16(r, TEMPLATE_PACKAGE,   packageName)
         r = replaceAllUtf16(r, LABEL_PLACEHOLDER,  label)
         return r

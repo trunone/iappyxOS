@@ -169,6 +169,7 @@ const demoTemplates = [
   ('taskdemo',   '\u23F0', 'Background Tasks',   'Scheduled tasks + widget refresh'),
   ('triggerdemo','\u26A1', 'Triggers',           'Fire actions on charger/headphones/BT/WiFi events'),
   ('accessibilitydemo', '\u267F', 'Accessibility', 'Screen inspection, automation & gestures'),
+  ('shizukudemo', '\u26A1', 'Shizuku',            'System shell execution with ADB/Root privileges'),
   // ── Data & Files ──
   ('',           '\u2500', '── Data & Files',    ''),
   ('bundledemo', '\uD83D\uDCE6', 'Bundle Explorer',  'Test bundled app files (DB, JSON, images)'),
