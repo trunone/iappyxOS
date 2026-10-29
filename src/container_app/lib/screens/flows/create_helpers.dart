@@ -163,6 +163,7 @@ const demoTemplates = [
   // ── Bluetooth ──
   ('',           '\u2500', '── Bluetooth',        ''),
   ('btserial',   '\uD83D\uDD35', 'BT Serial',     'Bluetooth Classic serial terminal'),
+  ('bthid',      '\uD83C\uDFAE', 'BT HID Remote', 'Bluetooth Keyboard/Mouse/Remote emulator'),
   // ── Widget & Tasks ──
   ('',           '\u2500', '── Widget & Tasks',  ''),
   ('widgetdemo', '\uD83D\uDCF2', 'Widget Dashboard', 'Home screen widget with stats'),

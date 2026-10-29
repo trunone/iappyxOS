@@ -578,6 +578,23 @@ Push notifications require Firebase setup in the app's Advanced Settings. Do NOT
 `iappyx.bluetooth.isConnected()` → boolean
 Use for: Arduino/ESP32 serial, OBD-II car diagnostics, Bluetooth printers, HC-05/HC-06 modules.
 
+### Bluetooth HID Device (Keyboard, Mouse, Media Remote emulation)
+`iappyx.hid.isSupported()` → boolean (sync) — is Bluetooth HID Device profile supported on this device? (Android 9+)
+`iappyx.hid.registerApp(name, provider, description, subclass, descriptorHex, cbId)` → `{ok}` — register device as Bluetooth HID peripheral (Keyboard/Mouse/Remote). Pass empty `descriptorHex` to use standard default combo descriptor.
+`iappyx.hid.unregisterApp(cbId)` → `{ok}` — unregister Bluetooth HID profile
+`iappyx.hid.connect(address, cbId)` → `{ok}` — connect HID profile to a paired host address
+`iappyx.hid.disconnect(address, cbId)` → `{ok}`
+`iappyx.hid.sendReport(reportId, reportHex)` — send raw HID report bytes by report ID
+`iappyx.hid.sendKeyPress(keyCode, modifier)` — send keypress (Report ID 1) and auto-release. Modifier: 1=LCtrl, 2=LShift, 4=LAlt, 8=LGUI, etc.
+`iappyx.hid.sendKeyRelease()` — send key release report (Report ID 1, all zeroes)
+`iappyx.hid.sendString(text)` — type ASCII string
+`iappyx.hid.sendMouseMove(dx, dy, buttons, wheel)` — send mouse movement/clicks (Report ID 2). Buttons: 1=Left, 2=Right, 4=Middle.
+`iappyx.hid.sendConsumerKey(usageCodeHex)` — send media/consumer key (Report ID 3, e.g., `'0x00E9'` Vol+, `'0x00EA'` Vol-, `'0x00E2'` Mute, `'0x00CD'` Play/Pause, `'0x00B5'` Next, `'0x00B6'` Prev)
+`iappyx.hid.onStateChange('window.onHidState')` — fires `{event:"appRegistered"|"appUnregistered"|"connected"|"disconnected", address, name}`
+`iappyx.hid.getConnectedDevices()` → JSON array of connected host devices `[{address, name}]`
+Also accessible via `iappyx.bluetooth.hid`.
+Use for: Presenter remotes, PC/TV media remotes, wireless touchpads, macro keypads, game controllers.
+
 ### Scheduled Tasks (background execution)
 `iappyx.tasks.schedule(id, intervalMs, 'window.onBackgroundTask')` — run JS on a schedule, even when app is closed. Min interval: 15 minutes. The callback receives `{taskId, background:true}`. Call `window._taskDone()` when finished. Has full bridge access (storage, httpClient, widget, notification) but no DOM. Max execution: 30 seconds.
 `iappyx.tasks.cancel(id)` — cancel a scheduled task

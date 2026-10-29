@@ -148,6 +148,7 @@ Generated apps access device hardware through a JavaScript bridge (`window.iappy
 | WiFi Direct | P2P peer discovery, connection, group management |
 | Push Notifications | FCM push notifications (requires Firebase setup in Advanced Settings) |
 | Bluetooth Classic | Serial communication (SPP) for Arduino, ESP32, OBD-II car diagnostics, HC-05/HC-06 |
+| Bluetooth HID Device | Emulate Bluetooth Keyboard, Mouse touchpad, Media Remote (Android 9+) |
 | Widget | Home screen widgets with configurable grid layouts, clocks, timers, checkboxes, toggles |
 | Tasks | Scheduled background JS execution — fetch APIs, update widgets, send notifications while app is closed |
 | Triggers | Fire a JS callback when charger / headphones / Bluetooth / WiFi / Android Auto connects or disconnects. Optional persistent mode survives app swipe-away and reboot. |
