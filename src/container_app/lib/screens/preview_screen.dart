@@ -30,7 +30,14 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 class PreviewScreen extends StatefulWidget {
   final String htmlContent;
-  const PreviewScreen({super.key, required this.htmlContent});
+  final String? title;
+  final bool isEmbedded;
+  const PreviewScreen({
+    super.key,
+    required this.htmlContent,
+    this.title,
+    this.isEmbedded = false,
+  });
   @override
   State<PreviewScreen> createState() => _PreviewScreenState();
 }
@@ -44,7 +51,7 @@ class _ConsoleLine {
 class _PreviewScreenState extends State<PreviewScreen> {
   late final WebViewController _controller;
   final List<_ConsoleLine> _console = [];
-  bool _consoleExpanded = true;
+  late bool _consoleExpanded;
   bool _bannerVisible = true;
   static const _channel = MethodChannel('com.iappyx.container/generator');
 
@@ -705,6 +712,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
   @override
   void initState() {
     super.initState();
+    _consoleExpanded = !widget.isEmbedded;
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..addJavaScriptChannel('ConsoleChannel', onMessageReceived: _onConsoleMessage)
@@ -903,7 +911,10 @@ class _PreviewScreenState extends State<PreviewScreen> {
       backgroundColor: const Color(0xFF0D0D1A),
       appBar: AppBar(
         backgroundColor: const Color(0xFF0D0D1A),
-        title: const Text('Preview', style: TextStyle(fontSize: 16)),
+        title: Text(
+          widget.title ?? (widget.isEmbedded ? 'Embedded App' : 'Preview'),
+          style: const TextStyle(fontSize: 16),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh, size: 20),
@@ -939,13 +950,15 @@ class _PreviewScreenState extends State<PreviewScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 color: const Color(0xFF1A1A2E),
-                child: const Row(children: [
+                child: Row(children: [
                   Expanded(child: Text(
-                    'Preview mode — bridges simulated. Camera, location, contacts, NFC require a built APK.',
-                    style: TextStyle(fontSize: 11, color: Colors.white38),
+                    widget.isEmbedded
+                        ? 'Embedded mode — running directly in host app. Some hardware bridges simulated.'
+                        : 'Preview mode — bridges simulated. Camera, location, contacts, NFC require a built APK.',
+                    style: const TextStyle(fontSize: 11, color: Colors.white38),
                   )),
-                  SizedBox(width: 8),
-                  Icon(Icons.close, size: 14, color: Colors.white24),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.close, size: 14, color: Colors.white24),
                 ]),
               ),
             ),

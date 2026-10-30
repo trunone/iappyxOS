@@ -35,8 +35,10 @@ class AppData {
   final String html;
   final String packageName;
   final String apkPath;
-  final String appType; // 'web', 'ai', 'demo'
+  final String appType; // 'web', 'ai', 'demo', 'task', 'embedded'
   final String templateId;
+
+  bool get isEmbedded => appType == 'embedded' || (packageName.isEmpty && apkPath.isEmpty);
   final String iconConfig; // JSON string — new icon system
   final String firebaseConfig; // google-services.json content (optional)
   final String emoji; // legacy
