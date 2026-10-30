@@ -266,6 +266,7 @@ class AppGenerator(private val context: Context) {
             "tcpsocket"    -> getTcpSocketApp(label)
             "udpchat"      -> getUdpChatApp(label)
             "btserial"     -> getBtSerialApp(label)
+            "bthid"        -> getBtHidApp(label)
             "widgetdemo"   -> getWidgetDemoApp(label)
             "taskdemo"     -> getTaskDemoApp(label)
             "triggerdemo"  -> getTriggerDemoApp(label)
@@ -7031,5 +7032,231 @@ function openDb(name){
   };
 }
 </script></body></html>""".trimIndent()
+
+    private fun getBtHidApp(appName: String): String = """
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>$appName</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:#0d0d1a;color:#eaeaea;font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:16px;display:flex;flex-direction:column;min-height:100vh}
+h2{font-size:18px;margin-bottom:12px;text-align:center}
+.btn{background:#0f3460;color:#fff;border:none;padding:12px 16px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;flex:1;text-align:center}
+.btn:active{opacity:0.7}
+.btn.danger{background:#ff6b6b22;color:#FF6B6B}
+.btn.success{background:#0f6460;color:#69F0AE}
+.card{background:#1a1a2e;border-radius:12px;padding:12px;margin-bottom:12px}
+.title{font-size:12px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-weight:bold}
+.row{display:flex;gap:8px;margin-bottom:8px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.touchpad{background:#0a0a14;border:1px dashed #0f3460;border-radius:12px;height:140px;display:flex;align-items:center;justify-content:center;color:#666;font-size:12px;user-select:none;touch-action:none;margin-bottom:8px}
+.input-row{display:flex;gap:8px;margin-bottom:8px}
+.input-row input{flex:1;background:#0a0a14;color:#eaeaea;border:1px solid #0f3460;border-radius:10px;padding:10px 14px;font-size:13px}
+.status{color:#4FC3F7;font-size:11px;text-align:center;margin-bottom:12px;min-height:16px}
+</style></head><body>
+<h2>$appName</h2>
+<div id="status" class="status">Checking HID support...</div>
+
+<div class="card">
+  <div class="title">HID Service Status</div>
+  <div class="row">
+    <button id="regBtn" class="btn success" onclick="toggleRegister()">Enable HID Remote</button>
+  </div>
+</div>
+
+<div class="card">
+  <div class="title">Paired Host Selection</div>
+  <select id="deviceSelect"><option value="">Loading paired devices...</option></select>
+  <div class="row">
+    <button class="btn" onclick="refreshDevices()">Refresh List</button>
+    <button class="btn success" onclick="connectSelected()">Connect Host</button>
+    <button class="btn danger" onclick="disconnectSelected()">Disconnect</button>
+  </div>
+</div>
+
+<div id="remoteControls" style="opacity:0.5;pointer-events:none">
+  <div class="card">
+    <div class="title">Media Remote</div>
+    <div class="grid">
+      <button class="btn" onclick="sendMedia('0x00B6')">⏮ Prev</button>
+      <button class="btn" onclick="sendMedia('0x00CD')">⏯ Play</button>
+      <button class="btn" onclick="sendMedia('0x00B5')">⏭ Next</button>
+      <button class="btn" onclick="sendMedia('0x00EA')">🔉 Vol-</button>
+      <button class="btn" onclick="sendMedia('0x00E2')">🔇 Mute</button>
+      <button class="btn" onclick="sendMedia('0x00E9')">🔊 Vol+</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="title">Keyboard Input</div>
+    <div class="input-row">
+      <input type="text" id="textInput" placeholder="Type text to send...">
+      <button class="btn" onclick="sendText()">Send</button>
+    </div>
+    <div class="row">
+      <button class="btn" onclick="sendKey('0x28','0')">↵ Enter</button>
+      <button class="btn" onclick="sendKey('0x2A','0')">⌫ Backspace</button>
+      <button class="btn" onclick="sendKey('0x2C','0')">Space</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="title">Mouse Touchpad</div>
+    <div id="touchpad" class="touchpad">Drag here to move mouse cursor</div>
+    <div class="row">
+      <button class="btn" onclick="mouseClick(1)">Left Click</button>
+      <button class="btn" onclick="mouseClick(2)">Right Click</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var registered=false;
+function setStatus(msg){document.getElementById('status').textContent=msg;}
+
+function waitBridge(fn){
+  if(window.iappyx&&window.iappyx.hid)fn();
+  else setTimeout(function(){waitBridge(fn)},100);
+}
+
+waitBridge(function(){
+  if(!iappyx.hid.isSupported()){
+    setStatus('Bluetooth HID profile is not supported on this device');
+    return;
+  }
+  setStatus('Ready — Tap "Enable HID Remote" to pair with PC/TV');
+  iappyx.hid.onStateChange('window.onHidState');
+  refreshDevices();
+});
+
+function refreshDevices(){
+  var sel=document.getElementById('deviceSelect');
+  sel.innerHTML='<option value="">Loading paired devices...</option>';
+  try{
+    var list=JSON.parse(iappyx.hid.getPairedDevices());
+    if(!list||!list.length){
+      sel.innerHTML='<option value="">No paired Bluetooth devices found</option>';
+      return;
+    }
+    sel.innerHTML='';
+    list.forEach(function(d){
+      var opt=document.createElement('option');
+      opt.value=d.address;
+      opt.textContent=(d.name||'Unknown Device')+' ('+d.address+')';
+      sel.appendChild(opt);
+    });
+  }catch(e){
+    sel.innerHTML='<option value="">Error reading paired devices</option>';
+  }
+}
+
+function connectSelected(){
+  var addr=document.getElementById('deviceSelect').value;
+  if(!addr){setStatus('Select a paired device first');return;}
+  setStatus('Connecting HID to '+addr+'...');
+  iappyx.hid.connect(addr,'_hidConn');
+  window._iappyxCb=window._iappyxCb||{};
+  window._iappyxCb['_hidConn']=function(r){
+    if(r.ok)setStatus('Connect request sent to '+addr);
+    else setStatus('Connect failed: '+(r.error||'unknown'));
+  };
+}
+
+function disconnectSelected(){
+  var addr=document.getElementById('deviceSelect').value;
+  if(!addr){setStatus('Select a device to disconnect');return;}
+  iappyx.hid.disconnect(addr,'_hidDisc');
+  window._iappyxCb=window._iappyxCb||{};
+  window._iappyxCb['_hidDisc']=function(r){
+    setStatus('Disconnected');
+  };
+}
+
+window.onHidState=function(e){
+  if(e.event==='appRegistered'){
+    registered=true;
+    setStatus('HID Remote enabled! Connect via PC/TV Bluetooth settings.');
+    document.getElementById('regBtn').textContent='Disable HID Remote';
+    document.getElementById('regBtn').className='btn danger';
+    document.getElementById('remoteControls').style.opacity='1';
+    document.getElementById('remoteControls').style.pointerEvents='auto';
+  }else if(e.event==='appUnregistered'){
+    registered=false;
+    setStatus('HID Remote disabled');
+    document.getElementById('regBtn').textContent='Enable HID Remote';
+    document.getElementById('regBtn').className='btn success';
+    document.getElementById('remoteControls').style.opacity='0.5';
+    document.getElementById('remoteControls').style.pointerEvents='none';
+  }else if(e.event==='connected'){
+    setStatus('Connected to '+(e.name||e.address));
+  }else if(e.event==='disconnected'){
+    setStatus('Disconnected from '+(e.name||e.address));
+  }
+};
+
+function toggleRegister(){
+  if(registered){
+    iappyx.hid.unregisterApp('_hid');
+  }else{
+    setStatus('Registering Bluetooth HID profile...');
+    iappyx.hid.registerApp('$appName','iappyxOS','Bluetooth Remote Control','0xC0','','_hid');
+    window._iappyxCb=window._iappyxCb||{};
+    window._iappyxCb['_hid']=function(r){
+      if(!r.ok)setStatus('Registration failed: '+(r.error||'unknown error'));
+    };
+  }
+}
+
+function sendMedia(code){
+  iappyx.hid.sendConsumerKey(code);
+}
+
+function sendText(){
+  var input=document.getElementById('textInput');
+  var val=input.value;
+  if(val){
+    iappyx.hid.sendString(val);
+    input.value='';
+  }
+}
+
+function sendKey(code,mod){
+  iappyx.hid.sendKeyPress(code,mod);
+}
+
+function mouseClick(btn){
+  iappyx.hid.sendMouseMove(0,0,btn,0);
+  setTimeout(function(){iappyx.hid.sendMouseMove(0,0,0,0);},50);
+}
+
+var tp=document.getElementById('touchpad');
+var lastX=0,lastY=0,touching=false;
+
+tp.addEventListener('touchstart',function(e){
+  if(e.touches.length===1){
+    touching=true;
+    lastX=e.touches[0].clientX;
+    lastY=e.touches[0].clientY;
+  }
+});
+
+tp.addEventListener('touchmove',function(e){
+  if(touching&&e.touches.length===1){
+    var dx=Math.round(e.touches[0].clientX-lastX);
+    var dy=Math.round(e.touches[0].clientY-lastY);
+    lastX=e.touches[0].clientX;
+    lastY=e.touches[0].clientY;
+    if(dx!==0||dy!==0){
+      iappyx.hid.sendMouseMove(dx,dy,0,0);
+    }
+    e.preventDefault();
+  }
+});
+
+tp.addEventListener('touchend',function(){touching=false;});
+</script></body></html>
+""".trimIndent()
 
 }

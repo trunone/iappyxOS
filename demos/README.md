@@ -45,6 +45,9 @@ Pre-built HTML apps that demonstrate iappyxOS native bridges and capabilities. E
 | `printexport.html` | Print & Export | Print to PDF, save to Downloads, share files |
 | `accessibilitydemo.html` | Accessibility | Screen inspection, automation & gestures |
 | `shizukudemo.html` | Shizuku | System shell execution with ADB/Root privileges |
+| `btserial.html` | BT Serial | Bluetooth Classic serial terminal |
+| `blescan.html` | BLE Scanner | Bluetooth LE scanner and characteristic read/write |
+| `bthid.html` | BT HID Remote | Bluetooth Keyboard, Mouse touchpad & Media Remote emulator |
 
 ## Usage
 
