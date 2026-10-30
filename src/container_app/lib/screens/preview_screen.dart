@@ -535,6 +535,23 @@ class _PreviewScreenState extends State<PreviewScreen> {
     onTokenRefresh:function(){}
   };
 
+  var hid={
+    isSupported:function(){return false;},
+    registerApp:function(n,p,d,sub,desc,cbId){console.warn('[Preview] Bluetooth HID not available in preview');_unsupported('hid.registerApp',cbId);},
+    unregisterApp:function(cbId){if(cbId)_deliverResult(cbId,{ok:true});},
+    connect:function(addr,cbId){_unsupported('hid.connect',cbId);},
+    disconnect:function(addr,cbId){if(cbId)_deliverResult(cbId,{ok:true});},
+    sendReport:function(id,hex){console.log('[Preview] HID sendReport #'+id+': '+hex);},
+    sendKeyPress:function(k,m){console.log('[Preview] HID keyPress: key='+k+' mod='+m);},
+    sendKeyRelease:function(){console.log('[Preview] HID keyRelease');},
+    sendMouseMove:function(x,y,b,w){console.log('[Preview] HID mouseMove: dx='+x+' dy='+y+' btn='+b);},
+    sendConsumerKey:function(c){console.log('[Preview] HID consumerKey: '+c);},
+    sendString:function(s){console.log('[Preview] HID sendString: '+s);},
+    onStateChange:function(){},
+    getPairedDevices:function(){return '[]';},
+    getConnectedDevices:function(){return '[]';}
+  };
+
   var bluetooth={
     scan:function(fn){console.warn('[Preview] Bluetooth not available in preview');},
     stopScan:function(){},
@@ -542,7 +559,9 @@ class _PreviewScreenState extends State<PreviewScreen> {
     send:function(){},sendHex:function(){},
     onData:function(){},onClose:function(){},
     disconnect:function(){},
-    isConnected:function(){return false;}
+    isConnected:function(){return false;},
+    getPairedDevices:function(){return '[]';},
+    hid:hid
   };
 
   var tasks={

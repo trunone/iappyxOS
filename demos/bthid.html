@@ -16,6 +16,7 @@ h2{font-size:18px;margin-bottom:12px;text-align:center}
 .title{font-size:12px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-weight:bold}
 .row{display:flex;gap:8px;margin-bottom:8px}
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+select{width:100%;background:#0a0a14;color:#eaeaea;border:1px solid #0f3460;border-radius:10px;padding:10px;font-size:13px;margin-bottom:8px}
 .touchpad{background:#0a0a14;border:1px dashed #0f3460;border-radius:12px;height:140px;display:flex;align-items:center;justify-content:center;color:#666;font-size:12px;user-select:none;touch-action:none;margin-bottom:8px}
 .input-row{display:flex;gap:8px;margin-bottom:8px}
 .input-row input{flex:1;background:#0a0a14;color:#eaeaea;border:1px solid #0f3460;border-radius:10px;padding:10px 14px;font-size:13px}
@@ -28,6 +29,16 @@ h2{font-size:18px;margin-bottom:12px;text-align:center}
   <div class="title">HID Service Status</div>
   <div class="row">
     <button id="regBtn" class="btn success" onclick="toggleRegister()">Enable HID Remote</button>
+  </div>
+</div>
+
+<div class="card">
+  <div class="title">Paired Host Selection</div>
+  <select id="deviceSelect"><option value="">Loading paired devices...</option></select>
+  <div class="row">
+    <button class="btn" onclick="refreshDevices()">Refresh List</button>
+    <button class="btn success" onclick="connectSelected()">Connect Host</button>
+    <button class="btn danger" onclick="disconnectSelected()">Disconnect</button>
   </div>
 </div>
 
@@ -83,12 +94,56 @@ waitBridge(function(){
   }
   setStatus('Ready — Tap "Enable HID Remote" to pair with PC/TV');
   iappyx.hid.onStateChange('window.onHidState');
+  refreshDevices();
 });
+
+function refreshDevices(){
+  var sel=document.getElementById('deviceSelect');
+  sel.innerHTML='<option value="">Loading paired devices...</option>';
+  try{
+    var list=JSON.parse(iappyx.hid.getPairedDevices());
+    if(!list||!list.length){
+      sel.innerHTML='<option value="">No paired Bluetooth devices found</option>';
+      return;
+    }
+    sel.innerHTML='';
+    list.forEach(function(d){
+      var opt=document.createElement('option');
+      opt.value=d.address;
+      opt.textContent=(d.name||'Unknown Device')+' ('+d.address+')';
+      sel.appendChild(opt);
+    });
+  }catch(e){
+    sel.innerHTML='<option value="">Error reading paired devices</option>';
+  }
+}
+
+function connectSelected(){
+  var addr=document.getElementById('deviceSelect').value;
+  if(!addr){setStatus('Select a paired device first');return;}
+  setStatus('Connecting HID to '+addr+'...');
+  iappyx.hid.connect(addr,'_hidConn');
+  window._iappyxCb=window._iappyxCb||{};
+  window._iappyxCb['_hidConn']=function(r){
+    if(r.ok)setStatus('Connect request sent to '+addr);
+    else setStatus('Connect failed: '+(r.error||'unknown'));
+  };
+}
+
+function disconnectSelected(){
+  var addr=document.getElementById('deviceSelect').value;
+  if(!addr){setStatus('Select a device to disconnect');return;}
+  iappyx.hid.disconnect(addr,'_hidDisc');
+  window._iappyxCb=window._iappyxCb||{};
+  window._iappyxCb['_hidDisc']=function(r){
+    setStatus('Disconnected');
+  };
+}
 
 window.onHidState=function(e){
   if(e.event==='appRegistered'){
     registered=true;
-    setStatus('HID Remote enabled! Connect via PC/TV Bluetooth settings.');
+    setStatus('HID Remote enabled! Select host & connect.');
     document.getElementById('regBtn').textContent='Disable HID Remote';
     document.getElementById('regBtn').className='btn danger';
     document.getElementById('remoteControls').style.opacity='1';

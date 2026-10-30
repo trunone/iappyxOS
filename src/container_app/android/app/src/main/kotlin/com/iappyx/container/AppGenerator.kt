@@ -7066,6 +7066,16 @@ h2{font-size:18px;margin-bottom:12px;text-align:center}
   </div>
 </div>
 
+<div class="card">
+  <div class="title">Paired Host Selection</div>
+  <select id="deviceSelect"><option value="">Loading paired devices...</option></select>
+  <div class="row">
+    <button class="btn" onclick="refreshDevices()">Refresh List</button>
+    <button class="btn success" onclick="connectSelected()">Connect Host</button>
+    <button class="btn danger" onclick="disconnectSelected()">Disconnect</button>
+  </div>
+</div>
+
 <div id="remoteControls" style="opacity:0.5;pointer-events:none">
   <div class="card">
     <div class="title">Media Remote</div>
@@ -7118,7 +7128,51 @@ waitBridge(function(){
   }
   setStatus('Ready — Tap "Enable HID Remote" to pair with PC/TV');
   iappyx.hid.onStateChange('window.onHidState');
+  refreshDevices();
 });
+
+function refreshDevices(){
+  var sel=document.getElementById('deviceSelect');
+  sel.innerHTML='<option value="">Loading paired devices...</option>';
+  try{
+    var list=JSON.parse(iappyx.hid.getPairedDevices());
+    if(!list||!list.length){
+      sel.innerHTML='<option value="">No paired Bluetooth devices found</option>';
+      return;
+    }
+    sel.innerHTML='';
+    list.forEach(function(d){
+      var opt=document.createElement('option');
+      opt.value=d.address;
+      opt.textContent=(d.name||'Unknown Device')+' ('+d.address+')';
+      sel.appendChild(opt);
+    });
+  }catch(e){
+    sel.innerHTML='<option value="">Error reading paired devices</option>';
+  }
+}
+
+function connectSelected(){
+  var addr=document.getElementById('deviceSelect').value;
+  if(!addr){setStatus('Select a paired device first');return;}
+  setStatus('Connecting HID to '+addr+'...');
+  iappyx.hid.connect(addr,'_hidConn');
+  window._iappyxCb=window._iappyxCb||{};
+  window._iappyxCb['_hidConn']=function(r){
+    if(r.ok)setStatus('Connect request sent to '+addr);
+    else setStatus('Connect failed: '+(r.error||'unknown'));
+  };
+}
+
+function disconnectSelected(){
+  var addr=document.getElementById('deviceSelect').value;
+  if(!addr){setStatus('Select a device to disconnect');return;}
+  iappyx.hid.disconnect(addr,'_hidDisc');
+  window._iappyxCb=window._iappyxCb||{};
+  window._iappyxCb['_hidDisc']=function(r){
+    setStatus('Disconnected');
+  };
+}
 
 window.onHidState=function(e){
   if(e.event==='appRegistered'){

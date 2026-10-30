@@ -576,6 +576,7 @@ Push notifications require Firebase setup in the app's Advanced Settings. Do NOT
 `iappyx.bluetooth.onClose('callback')` — fires `{}` when connection drops
 `iappyx.bluetooth.disconnect()` — close connection
 `iappyx.bluetooth.isConnected()` → boolean
+`iappyx.bluetooth.getPairedDevices()` → JSON array of paired devices `[{address, name}]` (sync)
 Use for: Arduino/ESP32 serial, OBD-II car diagnostics, Bluetooth printers, HC-05/HC-06 modules.
 
 ### Bluetooth HID Device (Keyboard, Mouse, Media Remote emulation)
@@ -591,6 +592,7 @@ Use for: Arduino/ESP32 serial, OBD-II car diagnostics, Bluetooth printers, HC-05
 `iappyx.hid.sendMouseMove(dx, dy, buttons, wheel)` — send mouse movement/clicks (Report ID 2). Buttons: 1=Left, 2=Right, 4=Middle.
 `iappyx.hid.sendConsumerKey(usageCodeHex)` — send media/consumer key (Report ID 3, e.g., `'0x00E9'` Vol+, `'0x00EA'` Vol-, `'0x00E2'` Mute, `'0x00CD'` Play/Pause, `'0x00B5'` Next, `'0x00B6'` Prev)
 `iappyx.hid.onStateChange('window.onHidState')` — fires `{event:"appRegistered"|"appUnregistered"|"connected"|"disconnected", address, name}`
+`iappyx.hid.getPairedDevices()` → JSON array of paired devices `[{address, name}]`
 `iappyx.hid.getConnectedDevices()` → JSON array of connected host devices `[{address, name}]`
 Also accessible via `iappyx.bluetooth.hid`.
 Use for: Presenter remotes, PC/TV media remotes, wireless touchpads, macro keypads, game controllers.

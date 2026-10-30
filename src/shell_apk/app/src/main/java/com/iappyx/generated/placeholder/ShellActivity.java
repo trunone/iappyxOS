@@ -381,6 +381,7 @@ public class ShellActivity extends ComponentActivity {
         webView.addJavascriptInterface(new NsdBridge(),          "iappyxNsd");
         webView.addJavascriptInterface(new HttpServerBridge(),   "iappyxHttpServer");
         webView.addJavascriptInterface(new BluetoothClassicBridge(),"iappyxBluetooth");
+        webView.addJavascriptInterface(new HidBridge(),             "iappyxHid");
         webView.addJavascriptInterface(new TaskBridge(),"iappyxTasks");
         webView.addJavascriptInterface(new WidgetBridge(),"iappyxWidget");
         webView.addJavascriptInterface(new CapabilitiesBridge(),"iappyxCapabilities");
@@ -529,6 +530,7 @@ public class ShellActivity extends ComponentActivity {
                     "sharePhoto:function(b){iappyxCamera.sharePhoto(b)}," +
                     "shareText:function(t,s){iappyxCamera.shareText(t,s||'')}," +
                     "bluetooth:iappyxBluetooth," +
+                    "hid:iappyxHid," +
                     "tasks:iappyxTasks," +
                     "widget:iappyxWidget," +
                     "trigger:iappyxTrigger," +
@@ -539,7 +541,7 @@ public class ShellActivity extends ComponentActivity {
                     "onTextSelected:function(fn){document.addEventListener('selectionchange',function(){" +
                     "var s=window.getSelection();if(s&&s.toString().trim().length>0){fn({text:s.toString().trim()})}" +
                     "})}" +
-                    "};", null);
+                    "};window.iappyx.bluetooth.hid=iappyxHid;", null);
                 // Check if launched by alarm (cold start)
                 Intent launchIntent = getIntent();
                 if (launchIntent != null && launchIntent.getBooleanExtra("alarm_fired", false)) {
@@ -7502,6 +7504,29 @@ public class ShellActivity extends ComponentActivity {
 
         @JavascriptInterface
         public boolean isConnected() { synchronized (btLock) { return btRunning && btSocket != null && btSocket.isConnected(); } }
+
+        @JavascriptInterface
+        public String getPairedDevices() {
+            org.json.JSONArray arr = new org.json.JSONArray();
+            try {
+                android.bluetooth.BluetoothManager btManager = getSystemService(android.bluetooth.BluetoothManager.class);
+                android.bluetooth.BluetoothAdapter adapter = btManager != null ? btManager.getAdapter() : null;
+                if (adapter != null) {
+                    java.util.Set<android.bluetooth.BluetoothDevice> bonded = adapter.getBondedDevices();
+                    if (bonded != null) {
+                        for (android.bluetooth.BluetoothDevice dev : bonded) {
+                            org.json.JSONObject obj = new org.json.JSONObject();
+                            obj.put("address", dev.getAddress());
+                            String name = "";
+                            try { if (dev.getName() != null) name = dev.getName(); } catch (SecurityException ignored) {}
+                            obj.put("name", name);
+                            arr.put(obj);
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+            return arr.toString();
+        }
     }
 
     private void unregisterBtDiscovery() {
@@ -7509,6 +7534,408 @@ public class ShellActivity extends ComponentActivity {
             try { unregisterReceiver(btDiscoveryReceiver); } catch (Exception ignored) {}
             btDiscoveryReceiver = null;
         }
+    }
+
+    // ── Bluetooth HID Device ──
+    private android.bluetooth.BluetoothHidDevice hidDevice;
+    private boolean hidAppRegistered = false;
+    private String hidStateCallbackFn;
+    private final java.util.concurrent.ConcurrentHashMap<String, android.bluetooth.BluetoothDevice> hidConnectedDevices = new java.util.concurrent.ConcurrentHashMap<>();
+    private android.bluetooth.BluetoothProfile.ServiceListener hidServiceListener;
+
+    private static final byte[] DEFAULT_HID_DESCRIPTOR = new byte[] {
+        // Keyboard (Report ID 1)
+        (byte) 0x05, (byte) 0x01, (byte) 0x09, (byte) 0x06, (byte) 0xA1, (byte) 0x01, (byte) 0x85, (byte) 0x01,
+        (byte) 0x05, (byte) 0x07, (byte) 0x19, (byte) 0xE0, (byte) 0x29, (byte) 0xE7, (byte) 0x15, (byte) 0x00,
+        (byte) 0x25, (byte) 0x01, (byte) 0x75, (byte) 0x01, (byte) 0x95, (byte) 0x08, (byte) 0x81, (byte) 0x02,
+        (byte) 0x95, (byte) 0x01, (byte) 0x75, (byte) 0x08, (byte) 0x81, (byte) 0x03, (byte) 0x95, (byte) 0x05,
+        (byte) 0x75, (byte) 0x01, (byte) 0x05, (byte) 0x08, (byte) 0x19, (byte) 0x01, (byte) 0x29, (byte) 0x05,
+        (byte) 0x91, (byte) 0x02, (byte) 0x95, (byte) 0x01, (byte) 0x75, (byte) 0x03, (byte) 0x91, (byte) 0x03,
+        (byte) 0x95, (byte) 0x06, (byte) 0x75, (byte) 0x08, (byte) 0x15, (byte) 0x00, (byte) 0x25, (byte) 0x65,
+        (byte) 0x05, (byte) 0x07, (byte) 0x19, (byte) 0x00, (byte) 0x29, (byte) 0x65, (byte) 0x81, (byte) 0x00,
+        (byte) 0xC0,
+        // Mouse (Report ID 2)
+        (byte) 0x05, (byte) 0x01, (byte) 0x09, (byte) 0x02, (byte) 0xA1, (byte) 0x01, (byte) 0x85, (byte) 0x02,
+        (byte) 0x09, (byte) 0x01, (byte) 0xA1, (byte) 0x00, (byte) 0x05, (byte) 0x09, (byte) 0x19, (byte) 0x01,
+        (byte) 0x29, (byte) 0x03, (byte) 0x15, (byte) 0x00, (byte) 0x25, (byte) 0x01, (byte) 0x95, (byte) 0x03,
+        (byte) 0x75, (byte) 0x01, (byte) 0x81, (byte) 0x02, (byte) 0x95, (byte) 0x01, (byte) 0x75, (byte) 0x05,
+        (byte) 0x81, (byte) 0x03, (byte) 0x05, (byte) 0x01, (byte) 0x09, (byte) 0x30, (byte) 0x09, (byte) 0x31,
+        (byte) 0x09, (byte) 0x38, (byte) 0x15, (byte) 0x81, (byte) 0x25, (byte) 0x7F, (byte) 0x75, (byte) 0x08,
+        (byte) 0x95, (byte) 0x03, (byte) 0x81, (byte) 0x06, (byte) 0xC0, (byte) 0xC0,
+        // Consumer Control (Report ID 3)
+        (byte) 0x05, (byte) 0x0C, (byte) 0x09, (byte) 0x01, (byte) 0xA1, (byte) 0x01, (byte) 0x85, (byte) 0x03,
+        (byte) 0x15, (byte) 0x00, (byte) 0x26, (byte) 0xFF, (byte) 0x03, (byte) 0x19, (byte) 0x00, (byte) 0x2A,
+        (byte) 0xFF, (byte) 0x03, (byte) 0x75, (byte) 0x10, (byte) 0x95, (byte) 0x01, (byte) 0x81, (byte) 0x00,
+        (byte) 0xC0
+    };
+
+    private void initBluetoothHidProxy() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && hidServiceListener == null) {
+            android.bluetooth.BluetoothManager btManager = getSystemService(android.bluetooth.BluetoothManager.class);
+            android.bluetooth.BluetoothAdapter adapter = btManager != null ? btManager.getAdapter() : null;
+            if (adapter != null) {
+                hidServiceListener = new android.bluetooth.BluetoothProfile.ServiceListener() {
+                    @Override
+                    public void onServiceConnected(int profile, android.bluetooth.BluetoothProfile proxy) {
+                        if (profile == android.bluetooth.BluetoothProfile.HID_DEVICE) {
+                            hidDevice = (android.bluetooth.BluetoothHidDevice) proxy;
+                        }
+                    }
+                    @Override
+                    public void onServiceDisconnected(int profile) {
+                        if (profile == android.bluetooth.BluetoothProfile.HID_DEVICE) {
+                            hidDevice = null;
+                            hidAppRegistered = false;
+                        }
+                    }
+                };
+                adapter.getProfileProxy(this, hidServiceListener, android.bluetooth.BluetoothProfile.HID_DEVICE);
+            }
+        }
+    }
+
+    private final Object hidCallbackObject = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) ? new android.bluetooth.BluetoothHidDevice.Callback() {
+        @Override
+        public void onAppStatusChanged(android.bluetooth.BluetoothDevice device, boolean registered) {
+            hidAppRegistered = registered;
+            if (hidStateCallbackFn != null) {
+                fireEvent(hidStateCallbackFn, "{\"event\":\"" + (registered ? "appRegistered" : "appUnregistered") + "\"}");
+            }
+        }
+
+        @Override
+        public void onConnectionStateChanged(android.bluetooth.BluetoothDevice device, int state) {
+            String addr = device != null ? device.getAddress() : "";
+            String name = "";
+            try { if (device != null && device.getName() != null) name = device.getName(); } catch (SecurityException ignored) {}
+            if (state == android.bluetooth.BluetoothProfile.STATE_CONNECTED) {
+                if (device != null) hidConnectedDevices.put(addr, device);
+                if (hidStateCallbackFn != null) {
+                    fireEvent(hidStateCallbackFn, "{\"event\":\"connected\",\"address\":\"" + addr + "\",\"name\":\"" + escapeJson(name) + "\"}");
+                }
+            } else if (state == android.bluetooth.BluetoothProfile.STATE_DISCONNECTED) {
+                if (device != null) hidConnectedDevices.remove(addr);
+                if (hidStateCallbackFn != null) {
+                    fireEvent(hidStateCallbackFn, "{\"event\":\"disconnected\",\"address\":\"" + addr + "\",\"name\":\"" + escapeJson(name) + "\"}");
+                }
+            }
+        }
+
+        public void onGetReport(android.bluetooth.BluetoothDevice device, byte type, byte id, int bufferSize) {
+            if (hidStateCallbackFn != null) {
+                fireEvent(hidStateCallbackFn, "{\"event\":\"getReport\",\"id\":" + (id & 0xFF) + ",\"bufferSize\":" + bufferSize + "}");
+            }
+        }
+
+        public void onSetReport(android.bluetooth.BluetoothDevice device, byte type, byte id, byte[] data) {
+            if (hidStateCallbackFn != null) {
+                StringBuilder hex = new StringBuilder();
+                if (data != null) {
+                    for (byte b : data) hex.append(String.format("%02x", b));
+                }
+                fireEvent(hidStateCallbackFn, "{\"event\":\"setReport\",\"id\":" + (id & 0xFF) + ",\"hex\":\"" + hex.toString() + "\"}");
+            }
+        }
+    } : null;
+
+    class HidBridge {
+        @JavascriptInterface
+        public boolean isSupported() {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return false;
+            android.bluetooth.BluetoothManager btManager = getSystemService(android.bluetooth.BluetoothManager.class);
+            android.bluetooth.BluetoothAdapter adapter = btManager != null ? btManager.getAdapter() : null;
+            return adapter != null;
+        }
+
+        @JavascriptInterface
+        public void registerApp(String name, String provider, String description, String subclassStr, String descriptorHex, String cbId) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+                deliverResult(cbId, "{\"ok\":false,\"error\":\"Bluetooth HID requires Android 9+\"}");
+                return;
+            }
+            initBluetoothHidProxy();
+            httpClientPool.submit(() -> {
+                int wait = 0;
+                while (hidDevice == null && wait < 20) {
+                    try { Thread.sleep(100); } catch (InterruptedException ignored) {}
+                    wait++;
+                }
+                if (hidDevice == null) {
+                    deliverResult(cbId, "{\"ok\":false,\"error\":\"Bluetooth HID profile unavailable\"}");
+                    return;
+                }
+                try {
+                    byte[] descBytes = (descriptorHex != null && descriptorHex.trim().length() > 0)
+                        ? parseHexBytes(descriptorHex) : DEFAULT_HID_DESCRIPTOR;
+                    String appName = (name != null && !name.trim().isEmpty()) ? name : "iappyx Remote";
+                    String appProv = (provider != null && !provider.trim().isEmpty()) ? provider : "iappyxOS";
+                    String appDesc = (description != null && !description.trim().isEmpty()) ? description : "Bluetooth HID Device";
+                    int subInt = 0xC0;
+                    if (subclassStr != null && !subclassStr.trim().isEmpty()) {
+                        try {
+                            subInt = subclassStr.startsWith("0x") || subclassStr.startsWith("0X")
+                                ? Integer.parseInt(subclassStr.substring(2), 16) : Integer.parseInt(subclassStr);
+                        } catch (NumberFormatException ignored) {}
+                    }
+
+                    android.bluetooth.BluetoothHidDeviceAppSdpSettings sdp = new android.bluetooth.BluetoothHidDeviceAppSdpSettings(
+                        appName, appDesc, appProv, (byte) subInt, descBytes
+                    );
+
+                    android.bluetooth.BluetoothHidDevice.Callback callback = (android.bluetooth.BluetoothHidDevice.Callback) hidCallbackObject;
+                    boolean res = hidDevice.registerApp(sdp, null, null, ContextCompat.getMainExecutor(ShellActivity.this), callback);
+                    if (res) {
+                        deliverResult(cbId, "{\"ok\":true}");
+                    } else {
+                        deliverResult(cbId, "{\"ok\":false,\"error\":\"HID registerApp returned false\"}");
+                    }
+                } catch (Exception e) {
+                    deliverResult(cbId, "{\"ok\":false,\"error\":\"" + escapeJson(e.getMessage()) + "\"}");
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void unregisterApp(String cbId) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && hidDevice != null && hidAppRegistered) {
+                try {
+                    boolean res = hidDevice.unregisterApp();
+                    hidAppRegistered = false;
+                    deliverResult(cbId, "{\"ok\":" + res + "}");
+                    return;
+                } catch (Exception e) {
+                    deliverResult(cbId, "{\"ok\":false,\"error\":\"" + escapeJson(e.getMessage()) + "\"}");
+                    return;
+                }
+            }
+            deliverResult(cbId, "{\"ok\":true}");
+        }
+
+        @JavascriptInterface
+        public void connect(String address, String cbId) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && hidDevice != null && address != null) {
+                try {
+                    android.bluetooth.BluetoothManager btManager = getSystemService(android.bluetooth.BluetoothManager.class);
+                    android.bluetooth.BluetoothAdapter adapter = btManager != null ? btManager.getAdapter() : null;
+                    if (adapter != null) {
+                        android.bluetooth.BluetoothDevice dev = adapter.getRemoteDevice(address);
+                        boolean res = hidDevice.connect(dev);
+                        deliverResult(cbId, "{\"ok\":" + res + "}");
+                        return;
+                    }
+                } catch (Exception e) {
+                    deliverResult(cbId, "{\"ok\":false,\"error\":\"" + escapeJson(e.getMessage()) + "\"}");
+                    return;
+                }
+            }
+            deliverResult(cbId, "{\"ok\":false,\"error\":\"HID profile or device unavailable\"}");
+        }
+
+        @JavascriptInterface
+        public void disconnect(String address, String cbId) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && hidDevice != null && address != null) {
+                try {
+                    android.bluetooth.BluetoothManager btManager = getSystemService(android.bluetooth.BluetoothManager.class);
+                    android.bluetooth.BluetoothAdapter adapter = btManager != null ? btManager.getAdapter() : null;
+                    if (adapter != null) {
+                        android.bluetooth.BluetoothDevice dev = adapter.getRemoteDevice(address);
+                        boolean res = hidDevice.disconnect(dev);
+                        deliverResult(cbId, "{\"ok\":" + res + "}");
+                        return;
+                    }
+                } catch (Exception e) {
+                    deliverResult(cbId, "{\"ok\":false,\"error\":\"" + escapeJson(e.getMessage()) + "\"}");
+                    return;
+                }
+            }
+            deliverResult(cbId, "{\"ok\":true}");
+        }
+
+        @JavascriptInterface
+        public void sendReport(String idStr, String reportHex) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && hidDevice != null) {
+                int id = 1;
+                if (idStr != null) {
+                    try { id = Integer.parseInt(idStr); } catch (NumberFormatException ignored) {}
+                }
+                byte[] bytes = parseHexBytes(reportHex);
+                for (android.bluetooth.BluetoothDevice dev : hidConnectedDevices.values()) {
+                    try {
+                        hidDevice.sendReport(dev, id, bytes);
+                    } catch (Exception e) {
+                        Log.e("iappyxOS", "HID sendReport: " + e.getMessage());
+                    }
+                }
+            }
+        }
+
+        @JavascriptInterface
+        public void sendKeyPress(String keyCodeStr, String modifierStr) {
+            int keyCode = 0;
+            int modifier = 0;
+            try { if (keyCodeStr != null) keyCode = Integer.parseInt(keyCodeStr); } catch (NumberFormatException ignored) {}
+            try { if (modifierStr != null) modifier = Integer.parseInt(modifierStr); } catch (NumberFormatException ignored) {}
+
+            byte[] report = new byte[]{(byte) modifier, 0, (byte) keyCode, 0, 0, 0, 0, 0};
+            sendReport("1", bytesToHex(report));
+            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> sendKeyRelease(), 25);
+        }
+
+        @JavascriptInterface
+        public void sendKeyRelease() {
+            sendReport("1", "0000000000000000");
+        }
+
+        @JavascriptInterface
+        public void sendMouseMove(String dxStr, String dyStr, String buttonsStr, String wheelStr) {
+            int dx = 0, dy = 0, buttons = 0, wheel = 0;
+            try { if (dxStr != null) dx = Integer.parseInt(dxStr); } catch (NumberFormatException ignored) {}
+            try { if (dyStr != null) dy = Integer.parseInt(dyStr); } catch (NumberFormatException ignored) {}
+            try { if (buttonsStr != null) buttons = Integer.parseInt(buttonsStr); } catch (NumberFormatException ignored) {}
+            try { if (wheelStr != null) wheel = Integer.parseInt(wheelStr); } catch (NumberFormatException ignored) {}
+
+            dx = Math.max(-127, Math.min(127, dx));
+            dy = Math.max(-127, Math.min(127, dy));
+            wheel = Math.max(-127, Math.min(127, wheel));
+
+            byte[] report = new byte[]{(byte) buttons, (byte) dx, (byte) dy, (byte) wheel};
+            sendReport("2", bytesToHex(report));
+        }
+
+        @JavascriptInterface
+        public void sendConsumerKey(String usageCodeStr) {
+            int code = 0;
+            try {
+                if (usageCodeStr != null) {
+                    code = usageCodeStr.startsWith("0x") || usageCodeStr.startsWith("0X")
+                        ? Integer.parseInt(usageCodeStr.substring(2), 16) : Integer.parseInt(usageCodeStr);
+                }
+            } catch (NumberFormatException ignored) {}
+
+            byte[] report = new byte[]{(byte) (code & 0xFF), (byte) ((code >> 8) & 0xFF)};
+            sendReport("3", bytesToHex(report));
+            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> sendReport("3", "0000"), 25);
+        }
+
+        @JavascriptInterface
+        public void sendString(String text) {
+            if (text == null || text.isEmpty()) return;
+            httpClientPool.submit(() -> {
+                for (int i = 0; i < text.length(); i++) {
+                    char c = text.charAt(i);
+                    int[] km = charToHidCode(c);
+                    if (km != null) {
+                        sendKeyPress(String.valueOf(km[0]), String.valueOf(km[1]));
+                        try { Thread.sleep(40); } catch (InterruptedException ignored) {}
+                    }
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void onStateChange(String callbackFn) {
+            if (isSafeCallbackName(callbackFn)) hidStateCallbackFn = callbackFn;
+        }
+
+        @JavascriptInterface
+        public String getPairedDevices() {
+            org.json.JSONArray arr = new org.json.JSONArray();
+            try {
+                android.bluetooth.BluetoothManager btManager = getSystemService(android.bluetooth.BluetoothManager.class);
+                android.bluetooth.BluetoothAdapter adapter = btManager != null ? btManager.getAdapter() : null;
+                if (adapter != null) {
+                    java.util.Set<android.bluetooth.BluetoothDevice> bonded = adapter.getBondedDevices();
+                    if (bonded != null) {
+                        for (android.bluetooth.BluetoothDevice dev : bonded) {
+                            org.json.JSONObject obj = new org.json.JSONObject();
+                            obj.put("address", dev.getAddress());
+                            String name = "";
+                            try { if (dev.getName() != null) name = dev.getName(); } catch (SecurityException ignored) {}
+                            obj.put("name", name);
+                            arr.put(obj);
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+            return arr.toString();
+        }
+
+        @JavascriptInterface
+        public String getConnectedDevices() {
+            org.json.JSONArray arr = new org.json.JSONArray();
+            for (android.bluetooth.BluetoothDevice dev : hidConnectedDevices.values()) {
+                try {
+                    org.json.JSONObject obj = new org.json.JSONObject();
+                    obj.put("address", dev.getAddress());
+                    String name = "";
+                    try { if (dev.getName() != null) name = dev.getName(); } catch (SecurityException ignored) {}
+                    obj.put("name", name);
+                    arr.put(obj);
+                } catch (Exception ignored) {}
+            }
+            return arr.toString();
+        }
+    }
+
+    private static int[] charToHidCode(char c) {
+        if (c >= 'a' && c <= 'z') return new int[]{0x04 + (c - 'a'), 0};
+        if (c >= 'A' && c <= 'Z') return new int[]{0x04 + (c - 'A'), 2};
+        if (c >= '1' && c <= '9') return new int[]{0x1E + (c - '1'), 0};
+        if (c == '0') return new int[]{0x27, 0};
+        if (c == ' ') return new int[]{0x2C, 0};
+        if (c == '\n' || c == '\r') return new int[]{0x28, 0};
+        if (c == '\t') return new int[]{0x2B, 0};
+        if (c == '\b') return new int[]{0x2A, 0};
+        if (c == '-') return new int[]{0x2D, 0};
+        if (c == '=') return new int[]{0x2E, 0};
+        if (c == '[') return new int[]{0x2F, 0};
+        if (c == ']') return new int[]{0x30, 0};
+        if (c == '\\') return new int[]{0x31, 0};
+        if (c == ';') return new int[]{0x33, 0};
+        if (c == '\'') return new int[]{0x34, 0};
+        if (c == '`') return new int[]{0x35, 0};
+        if (c == ',') return new int[]{0x36, 0};
+        if (c == '.') return new int[]{0x37, 0};
+        if (c == '/') return new int[]{0x38, 0};
+        if (c == '!') return new int[]{0x1E, 2};
+        if (c == '@') return new int[]{0x1F, 2};
+        if (c == '#') return new int[]{0x20, 2};
+        if (c == '$') return new int[]{0x21, 2};
+        if (c == '%') return new int[]{0x22, 2};
+        if (c == '^') return new int[]{0x23, 2};
+        if (c == '&') return new int[]{0x24, 2};
+        if (c == '*') return new int[]{0x25, 2};
+        if (c == '(') return new int[]{0x26, 2};
+        if (c == ')') return new int[]{0x27, 2};
+        if (c == '_') return new int[]{0x2D, 2};
+        if (c == '+') return new int[]{0x2E, 2};
+        if (c == '{') return new int[]{0x2F, 2};
+        if (c == '}') return new int[]{0x30, 2};
+        if (c == '|') return new int[]{0x31, 2};
+        if (c == ':') return new int[]{0x33, 2};
+        if (c == '"') return new int[]{0x34, 2};
+        if (c == '~') return new int[]{0x35, 2};
+        if (c == '<') return new int[]{0x36, 2};
+        if (c == '>') return new int[]{0x37, 2};
+        if (c == '?') return new int[]{0x38, 2};
+        return null;
+    }
+
+    private static byte[] parseHexBytes(String hex) {
+        if (hex == null) return new byte[0];
+        String clean = hex.replaceAll("[^0-9a-fA-F]", "");
+        byte[] bytes = new byte[clean.length() / 2];
+        for (int i = 0; i < bytes.length; i++) {
+            bytes[i] = (byte) Integer.parseInt(clean.substring(i * 2, i * 2 + 2), 16);
+        }
+        return bytes;
+    }
+
+    private static String bytesToHex(byte[] bytes) {
+        if (bytes == null) return "";
+        StringBuilder sb = new StringBuilder();
+        for (byte b : bytes) sb.append(String.format("%02x", b));
+        return sb.toString();
     }
 
     private volatile boolean udpRunning = false;
@@ -7888,6 +8315,29 @@ public class ShellActivity extends ComponentActivity {
             req.responseBody = null;
             req.responseFilePath = isContentUri(filePath) ? filePath : resolveFilePath(filePath);
             req.latch.countDown();
+        }
+
+        @JavascriptInterface
+        public String getPairedDevices() {
+            org.json.JSONArray arr = new org.json.JSONArray();
+            try {
+                android.bluetooth.BluetoothManager btManager = getSystemService(android.bluetooth.BluetoothManager.class);
+                android.bluetooth.BluetoothAdapter adapter = btManager != null ? btManager.getAdapter() : null;
+                if (adapter != null) {
+                    java.util.Set<android.bluetooth.BluetoothDevice> bonded = adapter.getBondedDevices();
+                    if (bonded != null) {
+                        for (android.bluetooth.BluetoothDevice dev : bonded) {
+                            org.json.JSONObject obj = new org.json.JSONObject();
+                            obj.put("address", dev.getAddress());
+                            String name = "";
+                            try { if (dev.getName() != null) name = dev.getName(); } catch (SecurityException ignored) {}
+                            obj.put("name", name);
+                            arr.put(obj);
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+            return arr.toString();
         }
 
         @JavascriptInterface
