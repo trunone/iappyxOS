@@ -24,9 +24,13 @@
 /// iappyx.* methods get stub responses instead of crashing.
 
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
+import 'package:file_picker/file_picker.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import '../services/bundle_storage.dart';
 
 class PreviewScreen extends StatefulWidget {
   final String htmlContent;
@@ -92,10 +96,11 @@ class _PreviewScreenState extends State<PreviewScreen> {
       delete window._iappyxCb[cbId];
     }
   }
+  window._deliver = _deliver;
 
   // Send async bridge call to Dart
-  function _call(bridge,method,args){
-    try{BridgeChannel.postMessage(JSON.stringify({bridge:bridge,method:method,args:args||{}}));}catch(e){}
+  function _call(bridge,method,args,cbId){
+    try{BridgeChannel.postMessage(JSON.stringify({bridge:bridge,method:method,args:args||{},cbId:cbId||''}));}catch(e){}
   }
 
   // Unsupported bridge method — delivers error via callback or logs warning
@@ -120,10 +125,10 @@ class _PreviewScreenState extends State<PreviewScreen> {
     readFileBase64:function(path){return null;},
     moveFile:function(src,dst){if(_files[src]){_files[dst]=_files[src];delete _files[src];return true;}return false;},
     copyFileToDownloads:function(){console.warn('[Preview] copyFileToDownloads not available');return false;},
-    pickFile:function(cbId){_unsupported('storage.pickFile',cbId);},
+    pickFile:function(cbId){_call('storage','pickFile',{},cbId);},
     listAssets:function(){return '[]';},
-    readAsset:function(name,cbId){_unsupported('storage.readAsset (no bundled files in preview)',cbId);},
-    extractAsset:function(name,dest,cbId){_unsupported('storage.extractAsset (no bundled files in preview)',cbId);}
+    readAsset:function(name,cbId){_call('storage','readAsset',{name:name},cbId);},
+    extractAsset:function(name,dest,cbId){_call('storage','extractAsset',{name:name,dest:dest},cbId);}
   };
 
   // ── Device (mock data) ──
@@ -358,25 +363,26 @@ class _PreviewScreenState extends State<PreviewScreen> {
   // ── Capabilities ──
   function capabilities(){
     return {
-      version:1,sdk:33,preview:true,
+      version:1,sdk:33,preview:false,
       bridges:{storage:true,device:true,vibration:true,clipboard:true,notification:true,
-        screen:true,tts:true,audio:true,sensor:true,alarm:true,sqlite:true,
+        screen:true,tts:true,audio:true,sensor:true,alarm:true,sqlite:true,httpClient:true,
+        camera:true,location:true,media:true,share:true,
         tasks:true,widget:true,capabilities:true,
         trigger:true,intent:true,accessibility:false,shizuku:false,
-        camera:false,location:false,contacts:false,sms:false,calendar:false,
+        contacts:false,sms:false,calendar:false,
         biometric:false,nfc:false,ble:false,bluetooth:false,ssh:false,smb:false,
-        httpServer:false,httpClient:false,tcp:false,udp:false,nsd:false,
-        wifiDirect:false,push:false,download:false,media:false},
+        httpServer:false,tcp:false,udp:false,nsd:false,
+        wifiDirect:false,push:false,download:false},
       permissions:{}
     };
   }
 
   // ── Unsupported bridges (return graceful errors) ──
   var camera={
-    takePhoto:function(cbId){_unsupported('camera.takePhoto',cbId);},
-    takeVideo:function(cbId){_unsupported('camera.takeVideo',cbId);},
-    scanQR:function(cbId){_unsupported('camera.scanQR',cbId);},
-    scanText:function(cbId){_unsupported('camera.scanText',cbId);},
+    takePhoto:function(cbId){_call('camera','takePhoto',{},cbId);},
+    takeVideo:function(cbId){_call('camera','takePhoto',{},cbId);},
+    scanQR:function(cbId){_call('camera','scanQR',{},cbId);},
+    scanText:function(cbId){_call('camera','scanQR',{},cbId);},
     classify:function(cbId){_unsupported('camera.classify',cbId);},
     removeBackground:function(cbId){_unsupported('camera.removeBackground',cbId);},
     getExif:function(path,cbId){_unsupported('camera.getExif',cbId);},
@@ -392,7 +398,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
   };
 
   var location={
-    getLocation:function(cbId){_unsupported('location.getLocation',cbId);},
+    getLocation:function(cbId){_call('location','getLocation',{},cbId);},
     watchPosition:function(fn){console.warn('[Preview] location.watchPosition not available in preview');},
     watchPositionWithError:function(fn,errFn){
       console.warn('[Preview] location not available in preview');
@@ -491,9 +497,20 @@ class _PreviewScreenState extends State<PreviewScreen> {
   };
 
   var httpClient={
-    request:function(opts,cbId){_unsupported('httpClient.request',cbId);},
-    requestFile:function(opts,dest,cbId){_unsupported('httpClient.requestFile',cbId);},
-    uploadFile:function(opts,fp,cbId){_unsupported('httpClient.uploadFile',cbId);},
+    request:function(opts,cbId){
+      var parsed=typeof opts==='string'?JSON.parse(opts):opts;
+      _call('httpClient','request',parsed,cbId);
+    },
+    requestFile:function(opts,dest,cbId){
+      var parsed=typeof opts==='string'?JSON.parse(opts):opts;
+      parsed.dest=dest;
+      _call('httpClient','requestFile',parsed,cbId);
+    },
+    uploadFile:function(opts,fp,cbId){
+      var parsed=typeof opts==='string'?JSON.parse(opts):opts;
+      parsed.filePath=fp;
+      _call('httpClient','uploadFile',parsed,cbId);
+    },
     uploadMultipart:function(opts,parts,cbId){_unsupported('httpClient.uploadMultipart',cbId);},
     getCookies:function(){return '[]';},
     setCookie:function(){},clearCookies:function(){}
@@ -598,7 +615,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
     playAudio:function(){console.warn('[Preview] media.playAudio not available');},
     saveToGallery:function(cbId){_unsupported('media.saveToGallery',cbId);},
     getMetadata:function(cbId){_unsupported('media.getMetadata',cbId);},
-    pickImage:function(cbId){_unsupported('media.pickImage',cbId);}
+    pickImage:function(cbId){_call('media','pickImage',{},cbId);}
   };
 
   // Triggers — simulated. Registrations are accepted and stored in-memory so
@@ -735,20 +752,41 @@ class _PreviewScreenState extends State<PreviewScreen> {
     }
   }
 
-  void _onBridgeMessage(JavaScriptMessage msg) {
+  void _onBridgeMessage(JavaScriptMessage msg) async {
     try {
       final data = jsonDecode(msg.message) as Map<String, dynamic>;
       final bridge = data['bridge'] as String? ?? '';
       final method = data['method'] as String? ?? '';
       final args = data['args'] as Map<String, dynamic>? ?? {};
-      _handleBridge(bridge, method, args);
+      final cbId = data['cbId'] as String? ?? '';
+      _handleBridge(bridge, method, args, cbId);
     } catch (e) {
       debugPrint('Bridge message error: $e');
     }
   }
 
-  void _handleBridge(String bridge, String method, Map<String, dynamic> args) {
+  void _deliverResult(String cbId, dynamic result) {
+    if (cbId.isEmpty || !mounted) return;
+    final jsonStr = jsonEncode(result);
+    final script = "if(window._deliver){window._deliver('${cbId}', ${jsonStr});}else if(window._iappyxCb&&window._iappyxCb['${cbId}']){window._iappyxCb['${cbId}'](${jsonStr});delete window._iappyxCb['${cbId}'];}";
+    _controller.runJavaScript(script);
+  }
+
+  void _handleBridge(String bridge, String method, Map<String, dynamic> args, String cbId) async {
     switch (bridge) {
+      case 'httpClient':
+        _handleHttpClient(method, args, cbId);
+        break;
+      case 'storage':
+        _handleStorage(method, args, cbId);
+        break;
+      case 'camera':
+      case 'media':
+        _handleMedia(method, args, cbId);
+        break;
+      case 'location':
+        _handleLocation(method, args, cbId);
+        break;
       case 'vibration':
         _handleVibration(method);
         break;
@@ -771,7 +809,6 @@ class _PreviewScreenState extends State<PreviewScreen> {
         _handleShare(method, args);
         break;
       case 'notification':
-        // Show a snackbar as a visual cue
         if (method == 'send' && mounted) {
           final title = args['title'] ?? '';
           final body = args['body'] ?? '';
@@ -781,6 +818,114 @@ class _PreviewScreenState extends State<PreviewScreen> {
         }
         break;
     }
+  }
+
+  Future<void> _handleHttpClient(String method, Map<String, dynamic> args, String cbId) async {
+    try {
+      final client = http.Client();
+      final rawUrl = args['url'] as String? ?? args['opts']?['url'] as String? ?? '';
+      if (rawUrl.isEmpty) {
+        _deliverResult(cbId, {'ok': false, 'error': 'Invalid URL'});
+        return;
+      }
+      final url = Uri.parse(rawUrl);
+      final reqMethod = (args['method'] as String? ?? args['opts']?['method'] as String? ?? 'GET').toUpperCase();
+      final headers = (args['headers'] as Map<String, dynamic>? ?? args['opts']?['headers'] as Map<String, dynamic>?)
+          ?.map((k, v) => MapEntry(k, v.toString())) ?? {};
+      final body = args['body'] as String? ?? args['opts']?['body'] as String?;
+
+      http.Response response;
+      if (reqMethod == 'POST') {
+        response = await client.post(url, headers: headers, body: body);
+      } else if (reqMethod == 'PUT') {
+        response = await client.put(url, headers: headers, body: body);
+      } else if (reqMethod == 'DELETE') {
+        response = await client.delete(url, headers: headers, body: body);
+      } else {
+        response = await client.get(url, headers: headers);
+      }
+      client.close();
+
+      _deliverResult(cbId, {
+        'ok': response.statusCode >= 200 && response.statusCode < 300,
+        'status': response.statusCode,
+        'body': response.body,
+        'headers': response.headers,
+      });
+    } catch (e) {
+      _deliverResult(cbId, {'ok': false, 'error': e.toString()});
+    }
+  }
+
+  Future<void> _handleStorage(String method, Map<String, dynamic> args, String cbId) async {
+    switch (method) {
+      case 'pickFile':
+        try {
+          final result = await FilePicker.platform.pickFiles(type: FileType.any);
+          if (result != null && result.files.isNotEmpty && result.files.first.path != null) {
+            final f = File(result.files.first.path!);
+            String content = '';
+            try { content = await f.readAsString(); } catch (_) {}
+            _deliverResult(cbId, {
+              'ok': true,
+              'name': result.files.first.name,
+              'path': result.files.first.path,
+              'size': result.files.first.size,
+              'content': content,
+            });
+          } else {
+            _deliverResult(cbId, {'ok': false, 'error': 'Cancelled'});
+          }
+        } catch (e) {
+          _deliverResult(cbId, {'ok': false, 'error': e.toString()});
+        }
+        break;
+      case 'readAsset':
+        final name = args['name'] as String? ?? '';
+        final appId = widget.title ?? '';
+        final files = await BundleStorage.readAll(appId);
+        if (files.containsKey(name)) {
+          final content = utf8.decode(files[name]!, allowMalformed: true);
+          _deliverResult(cbId, {'ok': true, 'content': content});
+        } else {
+          _deliverResult(cbId, {'ok': false, 'error': 'Asset $name not found'});
+        }
+        break;
+    }
+  }
+
+  Future<void> _handleMedia(String method, Map<String, dynamic> args, String cbId) async {
+    try {
+      final result = await FilePicker.platform.pickFiles(type: FileType.image);
+      if (result != null && result.files.isNotEmpty && result.files.first.path != null) {
+        final f = File(result.files.first.path!);
+        final bytes = await f.readAsBytes();
+        final b64 = base64Encode(bytes);
+        _deliverResult(cbId, {
+          'ok': true,
+          'path': result.files.first.path,
+          'base64': b64,
+          'data': 'data:image/jpeg;base64,$b64',
+        });
+      } else {
+        _deliverResult(cbId, {'ok': false, 'error': 'Cancelled'});
+      }
+    } catch (e) {
+      _deliverResult(cbId, {'ok': false, 'error': e.toString()});
+    }
+  }
+
+  Future<void> _handleLocation(String method, Map<String, dynamic> args, String cbId) async {
+    _deliverResult(cbId, {
+      'ok': true,
+      'latitude': 52.3676,
+      'longitude': 4.9041,
+      'accuracy': 5.0,
+      'altitude': 0.0,
+      'speed': 0.0,
+      'bearing': 0.0,
+      'time': DateTime.now().millisecondsSinceEpoch,
+    });
   }
 
   void _handleVibration(String method) {
