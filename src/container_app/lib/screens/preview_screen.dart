@@ -721,7 +721,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
     onTextSelected:function(fn){console.log('[Preview] onTextSelected registered');}
   };
 
-  console.log('[Preview] iappyx bridge loaded (preview mode — some features simulated)');
+  console.log('[iappyxOS] iappyx bridge loaded');
 })();
 </script>
 ''';
@@ -1088,22 +1088,20 @@ class _PreviewScreenState extends State<PreviewScreen> {
       body: Column(
         children: [
           // Bridge status banner
-          if (_bannerVisible)
+          if (_bannerVisible && !widget.isEmbedded)
             GestureDetector(
               onTap: () => setState(() => _bannerVisible = false),
               child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 color: const Color(0xFF1A1A2E),
-                child: Row(children: [
+                child: const Row(children: [
                   Expanded(child: Text(
-                    widget.isEmbedded
-                        ? 'Embedded mode — running directly in host app. Some hardware bridges simulated.'
-                        : 'Preview mode — bridges simulated. Camera, location, contacts, NFC require a built APK.',
-                    style: const TextStyle(fontSize: 11, color: Colors.white38),
+                    'Preview mode — bridges simulated. Camera, location, contacts, NFC require a built APK.',
+                    style: TextStyle(fontSize: 11, color: Colors.white38),
                   )),
-                  const SizedBox(width: 8),
-                  const Icon(Icons.close, size: 14, color: Colors.white24),
+                  SizedBox(width: 8),
+                  Icon(Icons.close, size: 14, color: Colors.white24),
                 ]),
               ),
             ),
