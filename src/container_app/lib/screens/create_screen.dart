@@ -417,6 +417,82 @@ class CreateScreenState extends State<CreateScreen> {
 
   // ── Builds ──
 
+  Future<void> _saveAndRunEmbedded() async {
+    final label = _nameController.text.trim();
+    if (label.isEmpty) { _snack('Please fill in name.'); return; }
+    if (label.length > 37 || label.codeUnits.length > 37) { _snack('Name too long (max 37 characters).'); return; }
+
+    String html = _htmlController.text.trim();
+    String description = _descController.text.trim();
+    String prompt = _generatedPrompt;
+
+    if (_mode == 'web') {
+      final url = _urlController.text.trim();
+      if (url.isEmpty) { _snack('Please fill in URL.'); return; }
+      if (!url.startsWith('http://') && !url.startsWith('https://')) { _snack('URL must start with http:// or https://'); return; }
+      final safeLabel = label.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+      final safeUrl = url.replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('<', '\\x3c');
+      html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>$safeLabel</title><style>*{margin:0;padding:0}body{background:#0d0d1a;display:flex;align-items:center;justify-content:center;height:100vh;font-family:-apple-system,sans-serif}.loader{color:#4FC3F7;font-size:14px}.spinner{width:24px;height:24px;border:3px solid #1a1a2e;border-top-color:#4FC3F7;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}@keyframes spin{to{transform:rotate(360deg)}}</style></head><body><div class="loader"><div class="spinner"></div>Loading...</div><script>window.location.href="$safeUrl";</script></body></html>';
+      description = 'Web app: $url';
+    } else if (_mode == 'demo') {
+      if (_selectedDemoId == null) { _snack('Select a demo template.'); return; }
+      final t = h.demoTemplates.where((t) => t.$1 == _selectedDemoId).firstOrNull;
+      if (t == null) { _snack('Demo template not found.'); return; }
+      description = 'Demo: ${t.$4}';
+      if (html.isEmpty) {
+        html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${t.$3}</title><style>body{background:#0d0d1a;color:#fff;font-family:sans-serif;padding:20px;text-align:center}h1{color:#4FC3F7}</style></head><body><h1>${t.$3}</h1><p>${t.$4}</p></body></html>';
+      }
+    } else {
+      if (html.isEmpty) { _snack('Fill in name and paste or generate code.'); return; }
+      if (!_isTaskOnly && !html.startsWith('<')) { _snack('HTML must start with < (e.g., <!DOCTYPE html>).'); return; }
+    }
+
+    final ic = _ensureIconConfig(label);
+    final now = DateTime.now();
+    final appId = _editingId ?? '${now.millisecondsSinceEpoch}_${Random().nextInt(9999)}';
+
+    if (_editingId != null) {
+      final existing = (await AppStorage.loadAll()).where((a) => a.id == _editingId).toList();
+      if (existing.isNotEmpty && existing.first.html.isNotEmpty && existing.first.html != html) {
+        await AppStorage.saveVersion(_editingId!, existing.first.html);
+      }
+    }
+
+    await AppStorage.save(AppData(
+      id: appId,
+      name: label,
+      description: description,
+      prompt: prompt,
+      html: AppStorage.tagHtml(html),
+      appType: 'embedded',
+      templateId: _selectedDemoId ?? '',
+      packageName: _existingPackageName ?? '',
+      apkPath: '',
+      iconConfig: ic.toJsonString(),
+      firebaseConfig: _firebaseConfig,
+      createdAt: _editingId != null ? (await _getExistingCreatedAt(_editingId!) ?? now) : now,
+      updatedAt: now,
+    ));
+
+    _editingId = appId;
+    widget.onAppSaved?.call();
+    _snack('App saved in Embedded Mode!');
+
+    if (mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PreviewScreen(
+            htmlContent: html,
+            title: label,
+            appId: appId,
+            isEmbedded: true,
+          ),
+        ),
+      );
+    }
+  }
+
   Future<void> _buildWebApp() async {
     final label = _nameController.text.trim();
     final url = _urlController.text.trim();
@@ -806,7 +882,9 @@ class CreateScreenState extends State<CreateScreen> {
       onEditingComplete: _validateUrl),
     _advancedSettings(),
     const SizedBox(height: 24),
-    h.buildActionButton(label: 'Build App', onPressed: _isBuilding ? null : _buildWebApp, icon: Icons.rocket_launch),
+    h.buildActionButton(label: 'Run in Embedded Mode', onPressed: _saveAndRunEmbedded, icon: Icons.play_arrow),
+    const SizedBox(height: 10),
+    h.buildActionButton(label: 'Save & Build APK', onPressed: _isBuilding ? null : _buildWebApp, icon: Icons.rocket_launch, secondary: true),
   ]);
 
   // ── AI ──
@@ -1188,14 +1266,30 @@ class CreateScreenState extends State<CreateScreen> {
         _section('Preview & Build', true, () {},
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             const SizedBox(height: 8),
-            const Text('Preview runs the app in a test environment. Save & Build creates an installable APK on your device.',
+            const Text('Run in Embedded Mode executes directly in the host app without generating an APK. Save & Build creates an installable APK on your device.',
                 style: TextStyle(fontSize: 11, color: Colors.white38)),
             const SizedBox(height: 8),
-            h.buildActionButton(label: 'Preview', icon: Icons.visibility, onPressed: _htmlController.text.trim().isEmpty ? null : () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => PreviewScreen(htmlContent: _htmlController.text.trim())));
-            }),
+            h.buildActionButton(
+              label: 'Run in Embedded Mode',
+              icon: Icons.play_arrow,
+              onPressed: _htmlController.text.trim().isEmpty ? null : _saveAndRunEmbedded,
+            ),
             const SizedBox(height: 10),
-            h.buildActionButton(label: 'Save & Build APK', icon: Icons.build, onPressed: _isBuilding ? null : _buildAiApp, secondary: true),
+            h.buildActionButton(
+              label: 'Preview',
+              icon: Icons.visibility,
+              onPressed: _htmlController.text.trim().isEmpty ? null : () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => PreviewScreen(htmlContent: _htmlController.text.trim(), title: _nameController.text.trim())));
+              },
+              secondary: true,
+            ),
+            const SizedBox(height: 10),
+            h.buildActionButton(
+              label: 'Save & Build APK',
+              icon: Icons.build,
+              onPressed: _isBuilding ? null : _buildAiApp,
+              secondary: true,
+            ),
           ]),
         ),
       ],
@@ -1445,10 +1539,20 @@ class CreateScreenState extends State<CreateScreen> {
       }
     }
     if (_selectedDemoId != null) {
+      final demoName = h.demoTemplates.where((t) => t.$1 == _selectedDemoId).firstOrNull?.$3 ?? 'Demo';
       widgets.add(const SizedBox(height: 12));
       widgets.add(h.buildActionButton(
-        label: 'Build ${h.demoTemplates.where((t) => t.$1 == _selectedDemoId).firstOrNull?.$3 ?? 'Demo'}',
-        onPressed: _isBuilding ? null : _buildDemo, icon: Icons.rocket_launch));
+        label: 'Run in Embedded Mode',
+        onPressed: _saveAndRunEmbedded,
+        icon: Icons.play_arrow,
+      ));
+      widgets.add(const SizedBox(height: 10));
+      widgets.add(h.buildActionButton(
+        label: 'Save & Build APK ($demoName)',
+        onPressed: _isBuilding ? null : _buildDemo,
+        icon: Icons.rocket_launch,
+        secondary: true,
+      ));
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: widgets);
   }

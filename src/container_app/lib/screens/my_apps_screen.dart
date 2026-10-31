@@ -33,6 +33,7 @@ import '../services/p2p_service.dart';
 import '../widgets/build_log.dart';
 import '../models/icon_config.dart';
 import 'icon_editor_screen.dart';
+import 'preview_screen.dart';
 import 'qr_transfer_screen.dart';
 import '../services/error_helper.dart';
 import '../services/github_service.dart';
@@ -629,7 +630,9 @@ class MyAppsScreenState extends State<MyAppsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 GestureDetector(
-                  onTap: app.packageName.isNotEmpty ? () => _launch(app) : null,
+                  onTap: () => app.isEmbedded || app.packageName.isEmpty
+                      ? _launchEmbedded(app)
+                      : _launch(app),
                   child: _buildAppIcon(app, 44),
                 ),
                 const SizedBox(width: 12),
@@ -644,6 +647,17 @@ class MyAppsScreenState extends State<MyAppsScreen> {
                               fontSize: 15, fontWeight: FontWeight.w600,
                             ), maxLines: 1, overflow: TextOverflow.ellipsis),
                           ),
+                          if (app.isEmbedded)
+                            Container(
+                              margin: const EdgeInsets.only(right: 6),
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1E1B4B),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: const Color(0xFF818CF8), width: 0.8),
+                              ),
+                              child: const Text('Embedded', style: TextStyle(fontSize: 9, color: Color(0xFFA5B4FC), fontWeight: FontWeight.w600)),
+                            ),
                           if (_versionCounts.containsKey(app.id))
                             Padding(
                               padding: const EdgeInsets.only(right: 6),
@@ -670,7 +684,13 @@ class MyAppsScreenState extends State<MyAppsScreen> {
           const Divider(height: 1, color: Color(0xFF0D0D1A)),
           Row(
             children: [
-              if (app.packageName.isNotEmpty)
+              if (app.isEmbedded || app.packageName.isEmpty)
+                _cardAction(
+                  icon: Icons.play_arrow,
+                  label: 'Run',
+                  onTap: () => _launchEmbedded(app),
+                )
+              else
                 _cardAction(
                   icon: Icons.launch,
                   label: 'Launch',
@@ -678,7 +698,7 @@ class MyAppsScreenState extends State<MyAppsScreen> {
                 ),
               _cardAction(
                 icon: Icons.refresh,
-                label: 'Build Again',
+                label: app.isEmbedded ? 'Build APK' : 'Build Again',
                 onTap: isRebuilding ? null : () => _rebuild(app),
                 loading: isRebuilding,
               ),
@@ -739,6 +759,20 @@ class MyAppsScreenState extends State<MyAppsScreen> {
           );
     }
     return IconPreview(config: parsed, size: size);
+  }
+
+  void _launchEmbedded(AppData app) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PreviewScreen(
+          htmlContent: app.html,
+          title: app.name,
+          appId: app.id,
+          isEmbedded: true,
+        ),
+      ),
+    );
   }
 
   Future<void> _launch(AppData app) async {
