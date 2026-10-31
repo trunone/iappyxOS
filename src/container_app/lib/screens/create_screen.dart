@@ -485,6 +485,7 @@ class CreateScreenState extends State<CreateScreen> {
           builder: (_) => PreviewScreen(
             htmlContent: html,
             title: label,
+            appId: appId,
             isEmbedded: true,
           ),
         ),

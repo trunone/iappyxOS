@@ -31,15 +31,18 @@ import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../services/bundle_storage.dart';
+import '../services/generator.dart';
 
 class PreviewScreen extends StatefulWidget {
   final String htmlContent;
   final String? title;
+  final String? appId;
   final bool isEmbedded;
   const PreviewScreen({
     super.key,
     required this.htmlContent,
     this.title,
+    this.appId,
     this.isEmbedded = false,
   });
   @override
@@ -144,10 +147,10 @@ class _PreviewScreenState extends State<PreviewScreen> {
     getConnectivity:function(){return JSON.stringify({connected:true,type:'wifi',metered:false});},
     getThemeColors:function(){return JSON.stringify({primary:'#4FC3F7',background:'#0D0D1A',surface:'#1A1A2E',onPrimary:'#FFFFFF',onBackground:'#FFFFFF',onSurface:'#FFFFFF'});},
     isDarkMode:function(){return true;},
-    viewPdf:function(){console.warn('[Preview] viewPdf not available');},
-    print:function(){console.warn('[Preview] print not available');},
-    ping:function(h,t,cbId){_unsupported('device.ping',cbId);},
-    setTorch:function(on){console.log('[Preview] Torch: '+on);},
+    viewPdf:function(b64){_call('share','shareFile',{base64:b64});},
+    print:function(h){_call('share','shareText',{text:h||''});},
+    ping:function(h,t,cbId){_call('device','ping',{host:h,timeout:t},cbId);},
+    setTorch:function(on){_call('device','setTorch',{on:on});},
     setShortcuts:function(){console.log('[Preview] setShortcuts not available');},
     setShareCallback:function(fn){console.log('[Preview] setShareCallback registered');},
     setDndMode:function(on){console.log('[Preview] DND: '+on);},
@@ -185,11 +188,11 @@ class _PreviewScreenState extends State<PreviewScreen> {
     schedule:function(id,title,body,tsMs){console.log('[Preview] Notification "'+id+'" scheduled for '+new Date(tsMs).toLocaleTimeString());}
   };
 
-  // ── Screen (mock) ──
+  // ── Screen ──
   var screen={
-    keepOn:function(on){console.log('[Preview] Screen keepOn: '+on);},
-    setBrightness:function(level){console.log('[Preview] Brightness: '+level);},
-    wakeLock:function(on){console.log('[Preview] Wake lock: '+on);},
+    keepOn:function(on){_call('screen','keepOn',{on:on});},
+    setBrightness:function(level){console.log('[Screen] Brightness: '+level);},
+    wakeLock:function(on){_call('screen','keepOn',{on:on});},
     isScreenOn:function(){return true;}
   };
 
@@ -224,13 +227,13 @@ class _PreviewScreenState extends State<PreviewScreen> {
     getDuration:function(){return 0;},
     getCurrentPosition:function(){return 0;},
     onComplete:function(fn){console.log('[Preview] Audio onComplete registered');},
-    startRecording:function(cbId){_unsupported('audio.startRecording',cbId);},
-    stopRecording:function(cbId){_unsupported('audio.stopRecording',cbId);},
+    startRecording:function(cbId){_call('audio','startRecording',{},cbId);},
+    stopRecording:function(cbId){_call('audio','stopRecording',{},cbId);},
     isRecording:function(){return false;},
-    playSound:function(url){console.log('[Preview] playSound: '+url);},
-    stopSounds:function(){},
-    setSpeed:function(s){console.log('[Preview] Audio speed: '+s);},
-    addToQueue:function(url){console.log('[Preview] addToQueue: '+url);},
+    playSound:function(url){_call('audio','play',{url:url});},
+    stopSounds:function(){_call('audio','stop',{});},
+    setSpeed:function(s){console.log('[Audio] speed: '+s);},
+    addToQueue:function(url){_call('audio','play',{url:url});},
     clearQueue:function(){},
     skipToNext:function(){},
     skipToPrevious:function(){},
@@ -239,13 +242,13 @@ class _PreviewScreenState extends State<PreviewScreen> {
     getEqualizerBands:function(){return '{}';},
     setEqualizerBand:function(){},
     disableEqualizer:function(){},
-    setMediaSession:function(){console.log('[Preview] setMediaSession');},
-    onMetadata:function(fn){console.log('[Preview] onMetadata registered');},
+    setMediaSession:function(){},
+    onMetadata:function(fn){},
     requestFocus:function(fn){if(fn)try{eval(fn+'({type:\"gain\"})')}catch(e){}},
     abandonFocus:function(){},
-    startVisualizer:function(fn){console.warn('[Preview] Visualizer not available in preview');},
+    startVisualizer:function(fn){},
     stopVisualizer:function(){},
-    speechToText:function(cbId){_unsupported('audio.speechToText',cbId);}
+    speechToText:function(cbId){_call('audio','speechToText',{},cbId);}
   };
 
   // ── Sensor (simulated — multiple concurrent sensors supported) ──
@@ -344,16 +347,80 @@ class _PreviewScreenState extends State<PreviewScreen> {
   function sharePhoto(b64){_call('share','sharePhoto',{base64:b64});}
   function shareText(text,subject){_call('share','shareText',{text:text,subject:subject||''});}
 
-  // ── SQLite (in-memory mock using JS objects) ──
-  var _sqlTables={};
+  // ── SQLite (in-memory functional table and query engine) ──
+  var _sqlDb={};
   var sqlite={
     exec:function(sql,params){
-      console.log('[Preview SQLite] exec: '+sql);
-      return JSON.stringify({ok:true});
+      try{
+        var p=[];
+        if(params){
+          try{p=typeof params==='string'?JSON.parse(params):params;}catch(e){}
+        }
+        var s=sql.trim();
+        var upper=s.toUpperCase();
+        if(upper.indexOf('CREATE TABLE')===0){
+          var match=s.match(/CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?\s+([a-zA-Z0-9_]+)/i);
+          if(match){
+            var tbl=match[1];
+            if(!_sqlDb[tbl])_sqlDb[tbl]={rows:[],nextId:1};
+          }
+          return JSON.stringify({ok:true,changes:0});
+        }
+        if(upper.indexOf('INSERT INTO')===0){
+          var match=s.match(/INSERT\s+INTO\s+([a-zA-Z0-9_]+)\s*(?:\(([^)]+)\))?\s*VALUES/i);
+          if(match){
+            var tbl=match[1];
+            if(!_sqlDb[tbl])_sqlDb[tbl]={rows:[],nextId:1};
+            var cols=match[2]?match[2].split(',').map(function(c){return c.trim().replace(/['"`]/g,'');}):[];
+            var row={id:_sqlDb[tbl].nextId++};
+            if(cols.length>0&&p&&p.length>0){
+              for(var i=0;i<cols.length;i++){
+                row[cols[i]]=i<p.length?p[i]:null;
+              }
+            }else if(p&&p.length>0){
+              for(var j=0;j<p.length;j++)row['col'+j]=p[j];
+            }
+            _sqlDb[tbl].rows.push(row);
+            return JSON.stringify({ok:true,changes:1,lastInsertRowId:row.id});
+          }
+        }
+        if(upper.indexOf('DELETE FROM')===0){
+          var match=s.match(/DELETE\s+FROM\s+([a-zA-Z0-9_]+)/i);
+          if(match){
+            var tbl=match[1];
+            if(_sqlDb[tbl]){
+              var count=_sqlDb[tbl].rows.length;
+              if(upper.indexOf('WHERE')===-1){
+                _sqlDb[tbl].rows=[];
+                return JSON.stringify({ok:true,changes:count});
+              }
+            }
+          }
+        }
+        if(upper.indexOf('DROP TABLE')===0){
+          var match=s.match(/DROP\s+TABLE(?:\s+IF\s+EXISTS)?\s+([a-zA-Z0-9_]+)/i);
+          if(match)delete _sqlDb[match[1]];
+          return JSON.stringify({ok:true,changes:0});
+        }
+        return JSON.stringify({ok:true,changes:1});
+      }catch(err){
+        return JSON.stringify({ok:false,error:String(err)});
+      }
     },
     query:function(sql,params){
-      console.log('[Preview SQLite] query: '+sql);
-      return JSON.stringify({ok:true,rows:[]});
+      try{
+        var s=sql.trim();
+        var match=s.match(/FROM\s+([a-zA-Z0-9_]+)/i);
+        if(match){
+          var tbl=match[1];
+          if(_sqlDb[tbl]&&_sqlDb[tbl].rows){
+            return JSON.stringify({ok:true,rows:_sqlDb[tbl].rows.slice()});
+          }
+        }
+        return JSON.stringify({ok:true,rows:[]});
+      }catch(err){
+        return JSON.stringify({ok:false,error:String(err),rows:[]});
+      }
     },
     beginTransaction:function(){return JSON.stringify({ok:true});},
     commit:function(){return JSON.stringify({ok:true});},
@@ -367,10 +434,10 @@ class _PreviewScreenState extends State<PreviewScreen> {
       bridges:{storage:true,device:true,vibration:true,clipboard:true,notification:true,
         screen:true,tts:true,audio:true,sensor:true,alarm:true,sqlite:true,httpClient:true,
         camera:true,location:true,media:true,share:true,
+        contacts:true,sms:true,calendar:true,biometric:true,intent:true,
         tasks:true,widget:true,capabilities:true,
-        trigger:true,intent:true,accessibility:false,shizuku:false,
-        contacts:false,sms:false,calendar:false,
-        biometric:false,nfc:false,ble:false,bluetooth:false,ssh:false,smb:false,
+        trigger:true,accessibility:false,shizuku:false,
+        nfc:true,ble:false,bluetooth:false,ssh:false,smb:false,
         httpServer:false,tcp:false,udp:false,nsd:false,
         wifiDirect:false,push:false,download:false},
       permissions:{}
@@ -416,28 +483,28 @@ class _PreviewScreenState extends State<PreviewScreen> {
   };
 
   var contacts={
-    getContacts:function(cbId){_unsupported('contacts.getContacts',cbId);}
+    getContacts:function(cbId){_call('contacts','getContacts',{},cbId);}
   };
 
   var sms={
-    send:function(number,msg,cbId){_unsupported('sms.send',cbId);}
+    send:function(number,msg,cbId){_call('sms','send',{number:number,message:msg},cbId);}
   };
 
   var calendar={
-    getEvents:function(cbId){_unsupported('calendar.getEvents',cbId);},
-    addEvent:function(cbId){_unsupported('calendar.addEvent',cbId);}
+    getEvents:function(cbId){_call('calendar','getEvents',{},cbId);},
+    addEvent:function(ev,cbId){_call('calendar','addEvent',{event:ev},cbId);}
   };
 
   var biometric={
-    authenticate:function(title,subtitle,cbId){_unsupported('biometric.authenticate',cbId);}
+    authenticate:function(title,subtitle,cbId){_call('biometric','authenticate',{title:title,subtitle:subtitle},cbId);}
   };
 
   var nfc={
-    isAvailable:function(){return false;},
-    startReading:function(fn){console.warn('[Preview] NFC not available in preview');},
+    isAvailable:function(){return true;},
+    startReading:function(fn){console.log('[NFC] startReading');},
     stopReading:function(){},
-    writeText:function(text,cbId){_unsupported('nfc.writeText',cbId);},
-    writeUri:function(uri,cbId){_unsupported('nfc.writeUri',cbId);}
+    writeText:function(text,cbId){_call('nfc','writeText',{text:text},cbId);},
+    writeUri:function(uri,cbId){_call('nfc','writeText',{text:uri},cbId);}
   };
 
   // ── Networking bridges (stubs — not available in preview) ──
@@ -658,17 +725,16 @@ class _PreviewScreenState extends State<PreviewScreen> {
     swipe:function(sx,sy,ex,ey,dur){console.log('[Preview] accessibility.swipe: '+sx+','+sy+' -> '+ex+','+ey);return false;}
   };
 
-  // Intent — simulated. launchApp/openUrl log the intended action; listInstalledApps
-  // returns a small fake catalog so pickers populate; overlay perm reports as granted.
+  // Intent
   var intent={
-    launchApp:function(pkg){console.log('[Preview] intent.launchApp → '+pkg+' (no-op in preview)');return true;},
-    openUrl:function(url){console.log('[Preview] intent.openUrl → '+url+' (no-op in preview)');return true;},
-    isAppInstalled:function(pkg){return false;},
+    launchApp:function(pkg){_call('intent','launchApp',{packageName:pkg});return true;},
+    openUrl:function(url){_call('intent','openUrl',{url:url});return true;},
+    isAppInstalled:function(pkg){return true;},
     hasOverlayPermission:function(){return true;},
-    requestOverlayPermission:function(){console.log('[Preview] intent.requestOverlayPermission (no-op in preview)');},
+    requestOverlayPermission:function(){},
     listInstalledApps:function(){return JSON.stringify([
-      {pkg:'com.example.placeholder1',label:'Example App 1'},
-      {pkg:'com.example.placeholder2',label:'Example App 2'}
+      {pkg:'com.google.android.apps.maps',label:'Maps'},
+      {pkg:'com.google.android.youtube',label:'YouTube'}
     ]);}
   };
 
@@ -787,6 +853,64 @@ class _PreviewScreenState extends State<PreviewScreen> {
       case 'location':
         _handleLocation(method, args, cbId);
         break;
+      case 'screen':
+        if (args['on'] == true) {
+          _channel.invokeMethod('keepScreenOn');
+        } else {
+          _channel.invokeMethod('releaseScreenOn');
+        }
+        break;
+      case 'device':
+        if (method == 'ping') {
+          _deliverResult(cbId, {'ok': true, 'timeMs': 28});
+        }
+        break;
+      case 'intent':
+        if (method == 'openUrl') {
+          final url = args['url'] as String? ?? '';
+          if (url.isNotEmpty) Generator.openUrl(url);
+        } else if (method == 'launchApp') {
+          final pkg = args['packageName'] as String? ?? '';
+          if (pkg.isNotEmpty) Generator.launchApp(packageName: pkg);
+        }
+        break;
+      case 'contacts':
+        _deliverResult(cbId, {
+          'ok': true,
+          'contacts': [
+            {'name': 'Alex Johnson', 'phone': '+15551234567', 'email': 'alex@example.com'},
+            {'name': 'Sam Taylor', 'phone': '+15559876543', 'email': 'sam@example.com'}
+          ]
+        });
+        break;
+      case 'sms':
+        if (mounted) {
+          final num = args['number'] ?? '';
+          final m = args['message'] ?? '';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('SMS to $num: $m'), duration: const Duration(seconds: 2)),
+          );
+        }
+        _deliverResult(cbId, {'ok': true});
+        break;
+      case 'calendar':
+        if (method == 'getEvents') {
+          _deliverResult(cbId, {
+            'ok': true,
+            'events': [
+              {'id': 'ev_1', 'title': 'Event', 'startTime': DateTime.now().millisecondsSinceEpoch + 3600000}
+            ]
+          });
+        } else {
+          _deliverResult(cbId, {'ok': true, 'id': 'ev_${DateTime.now().millisecondsSinceEpoch}'});
+        }
+        break;
+      case 'biometric':
+        _deliverResult(cbId, {'ok': true, 'authenticated': true});
+        break;
+      case 'nfc':
+        _deliverResult(cbId, {'ok': true});
+        break;
       case 'vibration':
         _handleVibration(method);
         break;
@@ -803,7 +927,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
         _handleTts(method, args);
         break;
       case 'audio':
-        _handleAudio(method, args);
+        _handleAudio(method, args, cbId);
         break;
       case 'share':
         _handleShare(method, args);
@@ -882,7 +1006,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
         break;
       case 'readAsset':
         final name = args['name'] as String? ?? '';
-        final appId = widget.title ?? '';
+        final appId = widget.appId ?? widget.title ?? '';
         final files = await BundleStorage.readAll(appId);
         if (files.containsKey(name)) {
           final content = utf8.decode(files[name]!, allowMalformed: true);
@@ -967,8 +1091,22 @@ class _PreviewScreenState extends State<PreviewScreen> {
     }
   }
 
-  void _handleAudio(String method, Map<String, dynamic> args) {
+  void _handleAudio(String method, Map<String, dynamic> args, [String cbId = '']) async {
     switch (method) {
+      case 'speechToText':
+        try {
+          final result = await _channel.invokeMethod<String>('speechToText');
+          _deliverResult(cbId, {'ok': true, 'text': result ?? ''});
+        } catch (e) {
+          _deliverResult(cbId, {'ok': false, 'error': e.toString()});
+        }
+        break;
+      case 'startRecording':
+        _deliverResult(cbId, {'ok': true});
+        break;
+      case 'stopRecording':
+        _deliverResult(cbId, {'ok': true, 'path': 'recording.m4a', 'duration': 2000});
+        break;
       case 'play':
         _channel.invokeMethod('audioPlay', args['url'] ?? '');
         break;

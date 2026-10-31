@@ -768,6 +768,7 @@ class MyAppsScreenState extends State<MyAppsScreen> {
         builder: (_) => PreviewScreen(
           htmlContent: app.html,
           title: app.name,
+          appId: app.id,
           isEmbedded: true,
         ),
       ),
