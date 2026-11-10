@@ -43,7 +43,7 @@ class PreviewScreen extends StatefulWidget {
     required this.htmlContent,
     this.title,
     this.appId,
-    this.isEmbedded = false,
+    this.isEmbedded = true,
   });
   @override
   State<PreviewScreen> createState() => _PreviewScreenState();
@@ -59,7 +59,6 @@ class _PreviewScreenState extends State<PreviewScreen> {
   late final WebViewController _controller;
   final List<_ConsoleLine> _console = [];
   late bool _consoleExpanded;
-  bool _bannerVisible = true;
   static const _channel = MethodChannel('com.iappyx.container/generator');
 
   // ── Console capture (injected before app code) ──
@@ -1195,7 +1194,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF0D0D1A),
         title: Text(
-          widget.title ?? (widget.isEmbedded ? 'Embedded App' : 'Preview'),
+          widget.title ?? 'Embedded App',
           style: const TextStyle(fontSize: 16),
         ),
         actions: [
@@ -1225,24 +1224,6 @@ class _PreviewScreenState extends State<PreviewScreen> {
       ),
       body: Column(
         children: [
-          // Bridge status banner
-          if (_bannerVisible && !widget.isEmbedded)
-            GestureDetector(
-              onTap: () => setState(() => _bannerVisible = false),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                color: const Color(0xFF1A1A2E),
-                child: const Row(children: [
-                  Expanded(child: Text(
-                    'Preview mode — bridges simulated. Camera, location, contacts, NFC require a built APK.',
-                    style: TextStyle(fontSize: 11, color: Colors.white38),
-                  )),
-                  SizedBox(width: 8),
-                  Icon(Icons.close, size: 14, color: Colors.white24),
-                ]),
-              ),
-            ),
           // WebView
           Expanded(
             flex: _consoleExpanded ? 6 : 10,

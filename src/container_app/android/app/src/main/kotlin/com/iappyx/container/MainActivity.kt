@@ -110,6 +110,26 @@ class MainActivity : FlutterActivity() {
                         }
                     }
                 }
+                "getPresetAppHtml" -> {
+                    val templateId = call.argument<String>("templateId") ?: "todo"
+                    val label = call.argument<String>("label") ?: ""
+                    try {
+                        val assets = generator.getPresetApp(templateId, label)
+                        val html = assets["index.html"]?.let { String(it, Charsets.UTF_8) } ?: ""
+                        val files = mutableMapOf<String, String>()
+                        for ((key, value) in assets) {
+                            if (key != "index.html") {
+                                files[key] = String(value, Charsets.UTF_8)
+                            }
+                        }
+                        result.success(mapOf(
+                            "html" to html,
+                            "files" to files,
+                        ))
+                    } catch (e: Exception) {
+                        result.error("FAILED", e.message, null)
+                    }
+                }
                 "injectHtml" -> {
                     val label = call.argument<String>("label") ?: ""
                     val html = call.argument<String>("html") ?: ""

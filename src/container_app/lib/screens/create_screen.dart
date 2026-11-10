@@ -378,7 +378,7 @@ class CreateScreenState extends State<CreateScreen> {
       _htmlController.text = html;
       _htmlExpanded = false;
     });
-    _snack('HTML loaded. Preview or build below.');
+    _snack('HTML loaded. Run or build below.');
     Future.delayed(const Duration(milliseconds: 300), () {
       if (_formScrollController.hasClients) {
         _formScrollController.animateTo(
@@ -426,6 +426,10 @@ class CreateScreenState extends State<CreateScreen> {
     String description = _descController.text.trim();
     String prompt = _generatedPrompt;
 
+    final ic = _ensureIconConfig(label);
+    final now = DateTime.now();
+    final appId = _editingId ?? '${now.millisecondsSinceEpoch}_${Random().nextInt(9999)}';
+
     if (_mode == 'web') {
       final url = _urlController.text.trim();
       if (url.isEmpty) { _snack('Please fill in URL.'); return; }
@@ -440,16 +444,22 @@ class CreateScreenState extends State<CreateScreen> {
       if (t == null) { _snack('Demo template not found.'); return; }
       description = 'Demo: ${t.$4}';
       if (html.isEmpty) {
+        try {
+          final res = await Generator.getPresetAppHtml(templateId: t.$1, label: label);
+          html = res['html'] as String? ?? '';
+          final files = res['files'] as Map<String, String>? ?? {};
+          for (final f in files.entries) {
+            await BundleStorage.addFile(appId, f.key, Uint8List.fromList(f.value.codeUnits));
+          }
+        } catch (_) {}
+      }
+      if (html.isEmpty) {
         html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${t.$3}</title><style>body{background:#0d0d1a;color:#fff;font-family:sans-serif;padding:20px;text-align:center}h1{color:#4FC3F7}</style></head><body><h1>${t.$3}</h1><p>${t.$4}</p></body></html>';
       }
     } else {
       if (html.isEmpty) { _snack('Fill in name and paste or generate code.'); return; }
       if (!_isTaskOnly && !html.startsWith('<')) { _snack('HTML must start with < (e.g., <!DOCTYPE html>).'); return; }
     }
-
-    final ic = _ensureIconConfig(label);
-    final now = DateTime.now();
-    final appId = _editingId ?? '${now.millisecondsSinceEpoch}_${Random().nextInt(9999)}';
 
     if (_editingId != null) {
       final existing = (await AppStorage.loadAll()).where((a) => a.id == _editingId).toList();
@@ -782,7 +792,7 @@ class CreateScreenState extends State<CreateScreen> {
       setState(() => _mode = 'ai');
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$name loaded — preview or build it'), backgroundColor: const Color(0xFF1A1A2E), duration: const Duration(seconds: 3)));
+          SnackBar(content: Text('$name loaded — run or build it'), backgroundColor: const Color(0xFF1A1A2E), duration: const Duration(seconds: 3)));
       });
     }),
   );
@@ -1260,10 +1270,10 @@ class CreateScreenState extends State<CreateScreen> {
 
       _advancedSettings(),
 
-      // Section: Preview & Build (both flows)
+      // Section: Run & Build (both flows)
       if (_isTaskOnly || _htmlController.text.trim().startsWith('<') || _selectedHtml != null) ...[
         const SizedBox(height: 10),
-        _section('Preview & Build', true, () {},
+        _section('Run & Build', true, () {},
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             const SizedBox(height: 8),
             const Text('Run in Embedded Mode executes directly in the host app without generating an APK. Save & Build creates an installable APK on your device.',
@@ -1273,15 +1283,6 @@ class CreateScreenState extends State<CreateScreen> {
               label: 'Run in Embedded Mode',
               icon: Icons.play_arrow,
               onPressed: _htmlController.text.trim().isEmpty ? null : _saveAndRunEmbedded,
-            ),
-            const SizedBox(height: 10),
-            h.buildActionButton(
-              label: 'Preview',
-              icon: Icons.visibility,
-              onPressed: _htmlController.text.trim().isEmpty ? null : () {
-                Navigator.push(context, MaterialPageRoute(builder: (_) => PreviewScreen(htmlContent: _htmlController.text.trim(), title: _nameController.text.trim())));
-              },
-              secondary: true,
             ),
             const SizedBox(height: 10),
             h.buildActionButton(

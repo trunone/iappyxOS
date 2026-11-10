@@ -761,12 +761,27 @@ class MyAppsScreenState extends State<MyAppsScreen> {
     return IconPreview(config: parsed, size: size);
   }
 
-  void _launchEmbedded(AppData app) {
+  Future<void> _launchEmbedded(AppData app) async {
+    String html = app.html;
+    if (html.isEmpty && app.templateId.isNotEmpty) {
+      try {
+        final res = await Generator.getPresetAppHtml(templateId: app.templateId, label: app.name);
+        html = res['html'] as String? ?? '';
+        final files = res['files'] as Map<String, String>? ?? {};
+        for (final f in files.entries) {
+          await BundleStorage.addFile(app.id, f.key, Uint8List.fromList(f.value.codeUnits));
+        }
+        if (html.isNotEmpty) {
+          await AppStorage.save(app.copyWith(html: html));
+        }
+      } catch (_) {}
+    }
+    if (!mounted) return;
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => PreviewScreen(
-          htmlContent: app.html,
+          htmlContent: html,
           title: app.name,
           appId: app.id,
           isEmbedded: true,

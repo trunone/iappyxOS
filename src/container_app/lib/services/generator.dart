@@ -35,6 +35,28 @@ class Generator {
   static const _ch = MethodChannel('com.iappyx.container/generator');
   static bool _building = false;
 
+  static Future<Map<String, dynamic>> getPresetAppHtml({
+    required String templateId,
+    required String label,
+  }) async {
+    final result = await _ch.invokeMethod<Map>('getPresetAppHtml', {
+      'templateId': templateId,
+      'label': label,
+    });
+    final html = result?['html'] as String? ?? '';
+    final rawFiles = result?['files'] as Map?;
+    final files = <String, String>{};
+    if (rawFiles != null) {
+      for (final entry in rawFiles.entries) {
+        files[entry.key.toString()] = entry.value.toString();
+      }
+    }
+    return {
+      'html': html,
+      'files': files,
+    };
+  }
+
   static Future<BuildResult> generateFromTemplate({
     required String label,
     required String templateId,

@@ -209,7 +209,7 @@ class AppGenerator(private val context: Context) {
         return dest
     }
 
-    private fun getPresetApp(templateId: String, label: String): Map<String, ByteArray> {
+    fun getPresetApp(templateId: String, label: String): Map<String, ByteArray> {
         val html = when (templateId) {
             "todo"      -> todoApp(label)
             "notes"     -> notesApp(label)
