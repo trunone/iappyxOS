@@ -564,7 +564,7 @@ Push notifications require Firebase setup in the app's Advanced Settings. Do NOT
 `iappyx.push.onTokenRefresh('window.onTokenRefresh')` — fires when token changes (rare): `{token}`
 
 ### Capabilities (sync)
-`iappyx.capabilities()` → `{version,sdk,bridges:{nfc:bool,biometric:bool,...},permissions:{camera:"granted"|"unasked"}}`
+`iappyx.capabilities()` → `{version,sdk,bridges:{storage:bool,device:bool,camera:bool,location:bool,notification:bool,vibration:bool,clipboard:bool,sensor:bool,tts:bool,alarm:bool,audio:bool,screen:bool,contacts:bool,sms:bool,calendar:bool,biometric:bool,nfc:bool,sqlite:bool,download:bool,media:bool,httpServer:bool,httpClient:bool,ssh:bool,smb:bool,ble:bool,push:bool,tcp:bool,nsd:bool,udp:bool,wifiDirect:bool,widget:bool,tasks:bool,bluetooth:bool,hid:bool,trigger:bool,intent:bool,accessibility:bool,shizuku:bool,capabilities:bool},permissions:{camera:"granted"|"unasked",location:"granted"|"unasked",recordAudio:"granted"|"unasked",contacts:"granted"|"unasked",sms:"granted"|"unasked",calendar:"granted"|"unasked",notifications:"granted"|"unasked",bluetooth:"granted"|"unasked"}}`
 
 ### Bluetooth Classic (serial communication)
 `iappyx.bluetooth.scan('window.onBtDevice')` — discover nearby Bluetooth devices. Fires `{event:'found', name, address, rssi}` per device and `{event:'done'}` when scan completes (~12s). Requires Bluetooth permission.

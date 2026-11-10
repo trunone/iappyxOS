@@ -8825,11 +8825,14 @@ public class ShellActivity extends ComponentActivity {
                 bridges.put("widget", true);
                 bridges.put("tasks", true);
                 bridges.put("bluetooth", true);
+                bridges.put("hid", new HidBridge().isSupported());
                 bridges.put("trigger", true);
+                bridges.put("intent", true);
                 bridges.put("accessibility", AppAccessibilityService.isServiceRunning());
                 boolean shizukuAvail = false;
                 try { shizukuAvail = rikka.shizuku.Shizuku.pingBinder(); } catch (Throwable ignored) {}
                 bridges.put("shizuku", shizukuAvail);
+                bridges.put("capabilities", true);
                 caps.put("bridges", bridges);
 
                 JSONObject perms = new JSONObject();
@@ -8837,12 +8840,35 @@ public class ShellActivity extends ComponentActivity {
                     Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED ? "granted" : "unasked");
                 perms.put("location", ContextCompat.checkSelfPermission(ShellActivity.this,
                     Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ? "granted" : "unasked");
+                perms.put("recordAudio", ContextCompat.checkSelfPermission(ShellActivity.this,
+                    Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED ? "granted" : "unasked");
                 perms.put("contacts", ContextCompat.checkSelfPermission(ShellActivity.this,
                     Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED ? "granted" : "unasked");
                 perms.put("sms", ContextCompat.checkSelfPermission(ShellActivity.this,
                     Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED ? "granted" : "unasked");
                 perms.put("calendar", ContextCompat.checkSelfPermission(ShellActivity.this,
                     Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED ? "granted" : "unasked");
+
+                // Notifications permission (POST_NOTIFICATIONS on Android 13+, or NotificationManagerCompat check)
+                boolean notifGranted = true;
+                if (Build.VERSION.SDK_INT >= 33) {
+                    notifGranted = ContextCompat.checkSelfPermission(ShellActivity.this,
+                        "android.permission.POST_NOTIFICATIONS") == PackageManager.PERMISSION_GRANTED;
+                } else {
+                    notifGranted = androidx.core.app.NotificationManagerCompat.from(ShellActivity.this).areNotificationsEnabled();
+                }
+                perms.put("notifications", notifGranted ? "granted" : "unasked");
+
+                // Bluetooth permission (BLUETOOTH_SCAN + BLUETOOTH_CONNECT on Android 12+, BLUETOOTH on older)
+                boolean btGranted = true;
+                if (Build.VERSION.SDK_INT >= 31) {
+                    btGranted = (ContextCompat.checkSelfPermission(ShellActivity.this, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED &&
+                                 ContextCompat.checkSelfPermission(ShellActivity.this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED);
+                } else {
+                    btGranted = ContextCompat.checkSelfPermission(ShellActivity.this, Manifest.permission.BLUETOOTH) == PackageManager.PERMISSION_GRANTED;
+                }
+                perms.put("bluetooth", btGranted ? "granted" : "unasked");
+
                 caps.put("permissions", perms);
 
                 return caps.toString();

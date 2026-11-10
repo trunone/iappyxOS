@@ -430,16 +430,14 @@ class _PreviewScreenState extends State<PreviewScreen> {
   function capabilities(){
     return {
       version:1,sdk:33,preview:false,
-      bridges:{storage:true,device:true,vibration:true,clipboard:true,notification:true,
-        screen:true,tts:true,audio:true,sensor:true,alarm:true,sqlite:true,httpClient:true,
-        camera:true,location:true,media:true,share:true,
-        contacts:true,sms:true,calendar:true,biometric:true,intent:true,
-        tasks:true,widget:true,capabilities:true,
-        trigger:true,accessibility:false,shizuku:false,
-        nfc:true,ble:false,bluetooth:false,ssh:false,smb:false,
-        httpServer:false,tcp:false,udp:false,nsd:false,
-        wifiDirect:false,push:false,download:false},
-      permissions:{}
+      bridges:{storage:true,device:true,camera:true,location:true,notification:true,
+        vibration:true,clipboard:true,sensor:true,tts:true,alarm:true,audio:true,
+        screen:true,contacts:true,sms:true,calendar:true,biometric:true,nfc:true,
+        sqlite:true,download:false,media:true,httpServer:false,httpClient:true,
+        ssh:false,smb:false,ble:false,push:false,tcp:false,nsd:false,udp:false,
+        wifiDirect:false,widget:true,tasks:true,bluetooth:false,hid:false,
+        trigger:true,intent:true,accessibility:false,shizuku:false,capabilities:true},
+      permissions:{camera:'granted',location:'granted',recordAudio:'granted',contacts:'granted',sms:'granted',calendar:'granted',notifications:'granted',bluetooth:'granted'}
     };
   }
 
