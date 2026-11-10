@@ -696,12 +696,13 @@ class MyAppsScreenState extends State<MyAppsScreen> {
                   label: 'Launch',
                   onTap: () => _launch(app),
                 ),
-              _cardAction(
-                icon: Icons.refresh,
-                label: app.isEmbedded ? 'Build APK' : 'Build Again',
-                onTap: isRebuilding ? null : () => _rebuild(app),
-                loading: isRebuilding,
-              ),
+              if (!app.isEmbedded)
+                _cardAction(
+                  icon: Icons.refresh,
+                  label: 'Build Again',
+                  onTap: isRebuilding ? null : () => _rebuild(app),
+                  loading: isRebuilding,
+                ),
               _cardAction(
                 icon: Icons.edit_outlined,
                 label: 'Edit',
